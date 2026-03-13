@@ -1,0 +1,71 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "coda-self-service"
+version = "0.1.0"
+description = "Minimal server runtime for connecting execution backends to Coda."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Conductor Quantum" }]
+dependencies = [
+    "cryptography>=41.0.0",
+    "fastapi>=0.115.0",
+    "httpx>=0.27.0",
+    "pydantic>=2.11.0",
+    "pydantic-settings>=2.0.0",
+    "PyJWT>=2.0.0",
+    "redis>=5.0.0",
+    "uvicorn>=0.30.0",
+]
+
+[project.scripts]
+coda = "self_service.server.cli:main"
+coda-self-service = "self_service.server.cli:main"
+
+[dependency-groups]
+dev = [
+    "mypy>=1.10.0",
+    "pre-commit>=4.5.1",
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+    "ruff>=0.11.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["self_service"]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-markers --strict-config"
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[tool.ruff]
+target-version = "py311"
+line-length = 88
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "TID"]
+ignore = ["E501"]
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+
+[[tool.mypy.overrides]]
+module = [
+    "fastapi",
+    "fastapi.*",
+    "httpx",
+    "httpx.*",
+    "jwt",
+    "redis",
+    "redis.*",
+    "uvicorn",
+]
+ignore_missing_imports = true
