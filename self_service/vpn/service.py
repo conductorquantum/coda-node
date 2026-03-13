@@ -20,6 +20,7 @@ import httpx
 if TYPE_CHECKING:
     from self_service.server.config import Settings
 
+from self_service.server.auth import sign_token
 from self_service.server.config import PERSISTED_CONFIG_PATH, PERSISTED_PRIVATE_KEY_PATH
 
 logger = logging.getLogger(__name__)
@@ -93,6 +94,7 @@ def _persist_runtime_config(settings: Settings) -> None:
         "jwt_private_key_path": str(PERSISTED_PRIVATE_KEY_PATH),
         "redis_url": settings.redis_url,
         "webapp_url": settings.webapp_url,
+        "connect_path": settings.connect_path,
         "register_path": settings.register_path,
         "heartbeat_path": settings.heartbeat_path,
         "webhook_path": settings.webhook_path,
@@ -105,6 +107,7 @@ def _persist_runtime_config(settings: Settings) -> None:
         "advertised_provider": settings.advertised_provider,
         "opx_host": settings.opx_host,
         "opx_port": settings.opx_port,
+        "self_service_machine_fingerprint": settings.self_service_machine_fingerprint,
     }
     _write_secure_text(PERSISTED_CONFIG_PATH, json.dumps(persisted, indent=2) + "\n")
 
@@ -236,21 +239,21 @@ def _as_int(data: dict[str, Any], key: str, default: int) -> int:
     raise SelfServiceError(f"Self-service response has invalid '{key}'")
 
 
-async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
-    if not settings.self_service_token:
-        raise SelfServiceError("self-service token is empty")
+def _resolve_machine_fingerprint(settings: Settings) -> str:
+    fingerprint = settings.self_service_machine_fingerprint or _machine_fingerprint()
+    settings.self_service_machine_fingerprint = fingerprint
+    return fingerprint
 
-    payload = {
-        "machine_fingerprint": settings.self_service_machine_fingerprint
-        or _machine_fingerprint(),
-        "opx_host": settings.opx_host,
-        "opx_port": settings.opx_port,
-    }
-    headers = {"Authorization": f"Bearer {settings.self_service_token}"}
-    url = f"{settings.webapp_url}{settings.self_service_path}"
 
+async def _post_connect(
+    settings: Settings, *, auth_header: str, payload: dict[str, Any]
+) -> dict[str, Any]:
     async with httpx.AsyncClient(timeout=settings.self_service_timeout_sec) as client:
-        response = await client.post(url, json=payload, headers=headers)
+        response = await client.post(
+            settings.connect_url,
+            json=payload,
+            headers={"Authorization": auth_header},
+        )
         try:
             response.raise_for_status()
         except httpx.HTTPStatusError as exc:
@@ -260,18 +263,66 @@ async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
         return cast(dict[str, Any], response.json())
 
 
+async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
+    if not settings.self_service_token:
+        raise SelfServiceError("self-service token is empty")
+
+    payload = {
+        "machine_fingerprint": _resolve_machine_fingerprint(settings),
+        "opx_host": settings.opx_host,
+        "opx_port": settings.opx_port,
+    }
+    return await _post_connect(
+        settings,
+        auth_header=f"Bearer {settings.self_service_token}",
+        payload=payload,
+    )
+
+
+async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
+    payload = {
+        "machine_fingerprint": _resolve_machine_fingerprint(settings),
+        "opx_host": settings.opx_host,
+        "opx_port": settings.opx_port,
+    }
+    token = sign_token(
+        settings.qpu_id,
+        settings.jwt_private_key,
+        key_id=settings.jwt_key_id,
+    )
+    return await _post_connect(
+        settings,
+        auth_header=f"Bearer {token}",
+        payload=payload,
+    )
+
+
 async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) -> None:
     settings.qpu_id = _as_str(bundle, "qpu_id")
     settings.qpu_display_name = _as_str(bundle, "qpu_display_name")
     settings.native_gate_set = _as_str(bundle, "native_gate_set")
     settings.num_qubits = _as_int(bundle, "num_qubits", settings.num_qubits)
-    settings.jwt_private_key = _as_str(bundle, "jwt_private_key")
-    settings.jwt_key_id = _as_str(bundle, "jwt_key_id")
+    jwt_private_key = bundle.get("jwt_private_key")
+    if isinstance(jwt_private_key, str) and jwt_private_key:
+        settings.jwt_private_key = jwt_private_key
+    elif not settings.jwt_private_key:
+        raise SelfServiceError("Self-service response missing valid 'jwt_private_key'")
+
+    jwt_key_id = bundle.get("jwt_key_id")
+    if isinstance(jwt_key_id, str) and jwt_key_id:
+        settings.jwt_key_id = jwt_key_id
+    elif not settings.jwt_key_id:
+        raise SelfServiceError("Self-service response missing valid 'jwt_key_id'")
+
     settings.redis_url = _as_str(bundle, "redis_url")
     settings.webapp_url = _as_str(
         bundle,
         "webapp_url" if "webapp_url" in bundle else "cloud_base_url",
     )
+
+    connect_path = bundle.get("connect_path")
+    if isinstance(connect_path, str) and connect_path:
+        settings.connect_path = connect_path
 
     register_path = bundle.get("register_path")
     if isinstance(register_path, str) and register_path:
@@ -316,20 +367,36 @@ async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) 
             await asyncio.to_thread(
                 _write_vpn_profile, settings.self_service_vpn_profile_path, profile
             )
-            await asyncio.to_thread(
-                _start_openvpn, settings.self_service_vpn_profile_path
+            from self_service.vpn.guard import _detect_tun_interface
+
+            iface = await asyncio.to_thread(
+                _detect_tun_interface, settings.vpn_interface_hint
             )
-            await _wait_for_tunnel(hint=settings.vpn_interface_hint)
+            if iface is None:
+                await asyncio.to_thread(
+                    _start_openvpn, settings.self_service_vpn_profile_path
+                )
+                await _wait_for_tunnel(hint=settings.vpn_interface_hint)
 
 
-async def self_service_settings(settings: Settings) -> None:
-    bundle = await fetch_self_service_bundle(settings)
+async def connect_settings(settings: Settings) -> None:
+    _resolve_machine_fingerprint(settings)
+    if settings.self_service_token:
+        bundle = await fetch_self_service_bundle(settings)
+    else:
+        await ensure_persisted_vpn(settings)
+        bundle = await fetch_reconnect_bundle(settings)
     try:
         await apply_self_service_bundle(settings, bundle)
         await asyncio.to_thread(_persist_runtime_config, settings)
     except Exception:
-        kill_openvpn_daemon()
+        if settings.self_service_token:
+            kill_openvpn_daemon()
         raise
+
+
+async def self_service_settings(settings: Settings) -> None:
+    await connect_settings(settings)
 
 
 async def ensure_persisted_vpn(settings: Settings) -> None:

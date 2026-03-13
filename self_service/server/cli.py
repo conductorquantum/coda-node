@@ -89,7 +89,7 @@ def _doctor() -> int:
         "C O D A  ·  D O C T O R",
         [
             ("WEBAPP", settings.webapp_url),
-            ("REGISTER", settings.register_url),
+            ("CONNECT", settings.connect_url),
             ("REDIS", settings.redis_url or "not set"),
         ],
     )

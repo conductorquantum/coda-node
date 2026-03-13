@@ -7,11 +7,9 @@ import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager, suppress
 
-import httpx
 import redis.asyncio as aioredis
 from fastapi import FastAPI
 
-from self_service.server.auth import sign_token
 from self_service.server.config import Settings
 from self_service.server.consumer import RedisConsumer
 from self_service.server.executor import JobExecutor, load_executor
@@ -19,40 +17,11 @@ from self_service.server.webhook import WebhookClient
 from self_service.vpn import (
     ServiceState,
     VPNGuard,
-    ensure_persisted_vpn,
+    connect_settings,
     kill_openvpn_daemon,
-    self_service_settings,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _derive_technology(native_gate_set: str) -> str:
-    parts = native_gate_set.split("_")
-    return parts[0] if parts else "unknown"
-
-
-async def _register_with_coda(settings: Settings) -> None:
-    token = sign_token(
-        settings.qpu_id,
-        settings.jwt_private_key,
-        key_id=settings.jwt_key_id,
-    )
-    payload = {
-        "qpu_id": settings.qpu_id,
-        "display_name": settings.qpu_display_name,
-        "provider": settings.advertised_provider,
-        "technology": _derive_technology(settings.native_gate_set),
-        "native_gate_set": settings.native_gate_set,
-        "num_qubits": settings.num_qubits,
-    }
-    async with httpx.AsyncClient(timeout=15) as client:
-        response = await client.post(
-            settings.register_url,
-            json=payload,
-            headers={"Authorization": f"Bearer {token}"},
-        )
-        response.raise_for_status()
 
 
 async def _on_vpn_state_change(state: ServiceState) -> None:
@@ -63,11 +32,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings = Settings()
-
-        if settings.self_service_token:
-            await self_service_settings(settings)
-        else:
-            await ensure_persisted_vpn(settings)
+        await connect_settings(settings)
 
         guard = VPNGuard(
             probe_targets=settings.vpn_probe_urls,
@@ -96,11 +61,6 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
             webhook=webhook,
             qpu_id=settings.qpu_id,
         )
-
-        try:
-            await _register_with_coda(settings)
-        except Exception:
-            logger.exception("Failed to register with coda; will continue startup")
 
         watch_task = asyncio.create_task(guard.watch(_on_vpn_state_change))
         consumer_task = asyncio.create_task(consumer.consume_loop())

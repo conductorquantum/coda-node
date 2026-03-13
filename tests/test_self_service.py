@@ -15,7 +15,9 @@ from self_service.vpn.service import (
     _validate_vpn_profile,
     _wait_for_tunnel,
     apply_self_service_bundle,
+    connect_settings,
     ensure_persisted_vpn,
+    fetch_reconnect_bundle,
     fetch_self_service_bundle,
     kill_openvpn_daemon,
     self_service_settings,
@@ -37,6 +39,7 @@ def _sample_bundle() -> dict[str, object]:
         "jwt_key_id": "cq-node-test-key-001",
         "redis_url": "rediss://default:token@host:6379",
         "webapp_url": "https://coda.conductorquantum.com",
+        "connect_path": "/api/internal/qpu/connect",
         "register_path": "/api/internal/qpu/register",
         "heartbeat_path": "/api/internal/qpu/heartbeat",
         "webhook_path": "/api/internal/qpu/webhook",
@@ -82,6 +85,48 @@ class TestFetchSelfServiceBundle:
         assert "qpu_id" not in request_body
         assert request_body["opx_host"] == "localhost"
         assert request_body["opx_port"] == 80
+        assert client.post.call_args.args[0] == settings.connect_url
+
+    @pytest.mark.asyncio
+    async def test_fetches_reconnect_bundle_with_jwt(self) -> None:
+        settings = Settings()
+        settings.self_service_token = ""
+        settings.qpu_id = "cq-node-test"
+        settings.jwt_private_key = "private-key"
+        settings.jwt_key_id = "kid-123"
+        settings.self_service_machine_fingerprint = "fingerprint-123"
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = _sample_bundle()
+
+        with (
+            patch(
+                "self_service.vpn.service.sign_token", return_value="signed-jwt"
+            ) as mock_sign,
+            patch("self_service.vpn.service.httpx.AsyncClient") as mock_client_cls,
+        ):
+            client = AsyncMock()
+            client.post = AsyncMock(return_value=mock_response)
+            client.__aenter__ = AsyncMock(return_value=client)
+            client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = client
+
+            bundle = await fetch_reconnect_bundle(settings)
+
+        assert bundle["qpu_id"] == "cq-node-test"
+        mock_sign.assert_called_once_with(
+            "cq-node-test",
+            "private-key",
+            key_id="kid-123",
+        )
+        assert (
+            client.post.call_args.kwargs["headers"]["Authorization"]
+            == "Bearer signed-jwt"
+        )
+        assert (
+            client.post.call_args.kwargs["json"]["machine_fingerprint"]
+            == "fingerprint-123"
+        )
 
 
 class TestApplySelfServiceBundle:
@@ -99,6 +144,24 @@ class TestApplySelfServiceBundle:
         assert settings.jwt_key_id == "cq-node-test-key-001"
         assert settings.redis_url.startswith("rediss://")
         assert settings.vpn_interface_hint == "utun5"
+        assert settings.connect_path == "/api/internal/qpu/connect"
+
+    @pytest.mark.asyncio
+    async def test_reconnect_bundle_keeps_existing_private_key(self) -> None:
+        settings = Settings()
+        settings.self_service_token = ""
+        settings.self_service_auto_vpn = False
+        settings.jwt_private_key = "persisted-private-key"
+        settings.jwt_key_id = "persisted-key-id"
+        bundle = _sample_bundle()
+        bundle.pop("jwt_private_key", None)
+        vpn = cast(dict[str, Any], bundle["vpn"])
+        vpn["required"] = False
+
+        await apply_self_service_bundle(settings, bundle)
+
+        assert settings.jwt_private_key == "persisted-private-key"
+        assert settings.jwt_key_id == "cq-node-test-key-001"
 
     @pytest.mark.asyncio
     async def test_requires_profile_when_vpn_required(self) -> None:
@@ -240,9 +303,40 @@ class TestSelfServiceSettings:
         persisted = json.loads(config_path.read_text())
         assert persisted["qpu_id"] == "cq-node-test"
         assert persisted["jwt_private_key_path"] == str(key_path)
+        assert persisted["connect_path"] == "/api/internal/qpu/connect"
+        assert persisted["self_service_machine_fingerprint"]
         if os.name != "nt":
             assert config_path.stat().st_mode & 0o777 == 0o600
             assert key_path.stat().st_mode & 0o777 == 0o600
+
+    @pytest.mark.asyncio
+    async def test_connect_settings_reuses_persisted_vpn_for_reconnect(self) -> None:
+        settings = Settings()
+        settings.self_service_token = ""
+        settings.qpu_id = "cq-node-test"
+        settings.jwt_private_key = "persisted-private-key"
+        settings.jwt_key_id = "persisted-key-id"
+        settings.self_service_auto_vpn = False
+        bundle = _sample_bundle()
+        bundle.pop("jwt_private_key", None)
+        vpn = cast(dict[str, Any], bundle["vpn"])
+        vpn["required"] = False
+
+        with (
+            patch(
+                "self_service.vpn.service.ensure_persisted_vpn",
+                new_callable=AsyncMock,
+            ) as mock_ensure_vpn,
+            patch(
+                "self_service.vpn.service.fetch_reconnect_bundle",
+                new_callable=AsyncMock,
+                return_value=bundle,
+            ) as mock_fetch,
+        ):
+            await connect_settings(settings)
+
+        mock_ensure_vpn.assert_awaited_once_with(settings)
+        mock_fetch.assert_awaited_once_with(settings)
 
 
 class TestReconnectWorkflow:

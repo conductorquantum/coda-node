@@ -39,15 +39,21 @@ class TestSettings:
         assert settings.advertised_provider == "coda"
         assert settings.opx_host == "localhost"
         assert settings.opx_port == 80
+        assert settings.connect_path == "/api/internal/qpu/connect"
 
     def test_callback_urls(self) -> None:
         settings = Settings()
         assert (
             settings.callback_url == f"{settings.webapp_url}/api/internal/qpu/webhook"
         )
+        assert settings.connect_url == f"{settings.webapp_url}/api/internal/qpu/connect"
         assert (
             settings.register_url == f"{settings.webapp_url}/api/internal/qpu/register"
         )
+        assert settings.vpn_probe_urls == [
+            f"{settings.webapp_url}/api/internal/qpu/connect",
+            f"{settings.webapp_url}/api/internal/qpu/heartbeat",
+        ]
         assert (
             settings.heartbeat_url
             == f"{settings.webapp_url}/api/internal/qpu/heartbeat"
@@ -105,6 +111,7 @@ class TestSettings:
                     "jwt_private_key_path": str(key_path),
                     "redis_url": "rediss://default:token@persisted:6379",
                     "webapp_url": "https://persisted.example.test",
+                    "connect_path": "/api/internal/qpu/connect",
                     "register_path": "/api/internal/qpu/register",
                     "heartbeat_path": "/api/internal/qpu/heartbeat",
                     "webhook_path": "/api/internal/qpu/webhook",
@@ -113,6 +120,7 @@ class TestSettings:
                     "vpn_probe_targets": [
                         "https://persisted.example.test/api/internal/qpu/health"
                     ],
+                    "self_service_machine_fingerprint": "persisted-fingerprint",
                 }
             )
             + "\n"
@@ -133,6 +141,8 @@ class TestSettings:
         assert settings.jwt_key_id == "persisted-key-id"
         assert settings.jwt_private_key.startswith("-----BEGIN PRIVATE KEY-----")
         assert settings.redis_url == "rediss://default:token@persisted:6379"
+        assert settings.connect_path == "/api/internal/qpu/connect"
+        assert settings.self_service_machine_fingerprint == "persisted-fingerprint"
         assert settings.vpn_probe_targets == [
             "https://persisted.example.test/api/internal/qpu/health"
         ]

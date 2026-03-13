@@ -53,6 +53,7 @@ def load_persisted_runtime_config() -> dict[str, Any]:
         "jwt_key_id",
         "redis_url",
         "webapp_url",
+        "connect_path",
         "register_path",
         "heartbeat_path",
         "webhook_path",
@@ -65,6 +66,7 @@ def load_persisted_runtime_config() -> dict[str, Any]:
         "advertised_provider",
         "opx_host",
         "opx_port",
+        "self_service_machine_fingerprint",
     ):
         if key in data:
             persisted[key] = data[key]
@@ -93,6 +95,7 @@ class Settings(BaseSettings):
         validation_alias="CODA_WEBAPP_URL",
     )
     webhook_path: str = "/api/internal/qpu/webhook"
+    connect_path: str = "/api/internal/qpu/connect"
     register_path: str = "/api/internal/qpu/register"
     heartbeat_path: str = "/api/internal/qpu/heartbeat"
     self_service_path: str = "/api/internal/qpu/self-service"
@@ -152,6 +155,10 @@ class Settings(BaseSettings):
         return f"{self.webapp_url}{self.register_path}"
 
     @property
+    def connect_url(self) -> str:
+        return f"{self.webapp_url}{self.connect_path}"
+
+    @property
     def heartbeat_url(self) -> str:
         return f"{self.webapp_url}{self.heartbeat_path}"
 
@@ -159,6 +166,6 @@ class Settings(BaseSettings):
     def vpn_probe_urls(self) -> list[str]:
         if self.vpn_probe_targets:
             return list(self.vpn_probe_targets)
-        return [self.register_url, self.heartbeat_url]
+        return [self.connect_url, self.heartbeat_url]
 
     model_config = {"env_prefix": "CODA_"}

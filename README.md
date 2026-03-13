@@ -3,7 +3,7 @@
 Minimal server runtime for connecting a machine to Coda with:
 
 - RS256 JWT auth
-- single-token self-service provisioning
+- bootstrap-token provisioning and JWT reconnects
 - VPN preflight and background monitoring
 - Redis stream job consumption
 - signed result webhooks
@@ -33,6 +33,9 @@ Important environment variables:
 - `CODA_WEBAPP_URL`: Coda base URL
 - `CODA_EXECUTOR_FACTORY`: optional import path like `my_pkg.runner:create_executor`
 
+The runtime now uses `POST /api/internal/qpu/connect` for both first bootstrap
+and later JWT reconnects. A bootstrap token is only required for the first run.
+
 ## Reconnect workflow
 
 After a successful self-service bootstrap, the runtime now persists the issued
@@ -46,6 +49,8 @@ Both files are written with `0600` permissions on POSIX systems.
 On later starts, `uv run coda start` automatically loads `/tmp/coda.config`,
 reads the private key from `/tmp/coda-private-key`, and reuses the saved VPN
 profile to bring the tunnel back up when `self_service_auto_vpn` is enabled.
+The saved `self_service_machine_fingerprint` is reused on reconnect so the host
+can authenticate to `/api/internal/qpu/connect` with JWT plus fingerprint.
 
 If `CODA_EXECUTOR_FACTORY` is unset, the package uses a `NoopExecutor` that
 acknowledges jobs and returns a deterministic zero bitstring result. That keeps
