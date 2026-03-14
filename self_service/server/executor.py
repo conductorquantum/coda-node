@@ -1,4 +1,17 @@
-"""Execution backend protocol and loader."""
+"""Pluggable execution backend for quantum job processing.
+
+The :class:`JobExecutor` protocol defines the single ``run`` method that
+backends must implement.  A backend can be anything from a hardware QPU
+driver to a simulator -- the consumer doesn't care.
+
+Executor resolution order (in :func:`load_executor`):
+
+1. If ``CODA_EXECUTOR_FACTORY`` is set, import the dotted path and use
+   it as either a pre-built executor instance (has ``.run``) or a
+   factory callable.
+2. Otherwise fall back to :class:`NoopExecutor`, which returns a
+   deterministic all-zeros bitstring for every job.
+"""
 
 from __future__ import annotations
 
@@ -18,14 +31,38 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class ExecutionResult:
+    """Measurement outcome returned by an executor.
+
+    Attributes:
+        counts: Mapping from bitstring (e.g. ``"010"``) to the number of
+            times that outcome was observed.
+        execution_time_ms: Wall-clock execution time in milliseconds.
+        shots_completed: Total shots actually executed (may differ from
+            the requested count if the backend applies shot budgeting).
+    """
+
     counts: dict[str, int]
     execution_time_ms: float
     shots_completed: int
 
 
 class JobExecutor(Protocol):
+    """Protocol that all execution backends must satisfy.
+
+    Implement a single async ``run`` method that accepts a validated IR
+    program and returns an :class:`ExecutionResult`.
+    """
+
     async def run(self, ir: NativeGateIR, shots: int) -> ExecutionResult:
-        """Execute a Coda job and return measurement counts."""
+        """Execute a quantum circuit and return measurement counts.
+
+        Args:
+            ir: A validated native-gate intermediate representation.
+            shots: Number of measurement shots to perform.
+
+        Returns:
+            An :class:`ExecutionResult` with bitstring counts.
+        """
 
 
 class NoopExecutor:
@@ -51,7 +88,27 @@ def _load_attr(import_path: str) -> Any:
 
 
 def load_executor(settings: Settings) -> JobExecutor:
-    """Load a configured executor factory or fall back to ``NoopExecutor``."""
+    """Resolve and instantiate the configured execution backend.
+
+    If ``settings.executor_factory`` is empty, a :class:`NoopExecutor`
+    is returned with a warning.  Otherwise the import path is loaded
+    and treated as either:
+
+    * A pre-built object with a ``run`` method (returned directly).
+    * A factory callable.  If the callable accepts parameters,
+      *settings* is passed in; otherwise it is called with no arguments.
+
+    Args:
+        settings: Runtime settings containing ``executor_factory``.
+
+    Returns:
+        An object satisfying the :class:`JobExecutor` protocol.
+
+    Raises:
+        ValueError: If the import path format is invalid.
+        TypeError: If the target is not callable or does not produce a
+            runner with a ``run`` method.
+    """
     if not settings.executor_factory:
         logger.warning("CODA_EXECUTOR_FACTORY unset; using NoopExecutor")
         return NoopExecutor()

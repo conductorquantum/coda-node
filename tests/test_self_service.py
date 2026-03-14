@@ -59,6 +59,8 @@ class TestFetchSelfServiceBundle:
     @pytest.mark.asyncio
     async def test_requires_token(self) -> None:
         settings = Settings()
+        settings.jwt_private_key = "placeholder"
+        settings.jwt_key_id = "placeholder"
         settings.self_service_token = ""
         with pytest.raises(SelfServiceError, match="self-service token is empty"):
             await fetch_self_service_bundle(settings)
@@ -90,10 +92,10 @@ class TestFetchSelfServiceBundle:
     @pytest.mark.asyncio
     async def test_fetches_reconnect_bundle_with_jwt(self) -> None:
         settings = Settings()
-        settings.self_service_token = ""
-        settings.qpu_id = "cq-node-test"
         settings.jwt_private_key = "private-key"
         settings.jwt_key_id = "kid-123"
+        settings.self_service_token = ""
+        settings.qpu_id = "cq-node-test"
         settings.self_service_machine_fingerprint = "fingerprint-123"
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -149,10 +151,10 @@ class TestApplySelfServiceBundle:
     @pytest.mark.asyncio
     async def test_reconnect_bundle_keeps_existing_private_key(self) -> None:
         settings = Settings()
-        settings.self_service_token = ""
         settings.self_service_auto_vpn = False
         settings.jwt_private_key = "persisted-private-key"
         settings.jwt_key_id = "persisted-key-id"
+        settings.self_service_token = ""
         bundle = _sample_bundle()
         bundle.pop("jwt_private_key", None)
         vpn = cast(dict[str, Any], bundle["vpn"])
@@ -312,10 +314,10 @@ class TestSelfServiceSettings:
     @pytest.mark.asyncio
     async def test_connect_settings_reuses_persisted_vpn_for_reconnect(self) -> None:
         settings = Settings()
-        settings.self_service_token = ""
-        settings.qpu_id = "cq-node-test"
         settings.jwt_private_key = "persisted-private-key"
         settings.jwt_key_id = "persisted-key-id"
+        settings.self_service_token = ""
+        settings.qpu_id = "cq-node-test"
         settings.self_service_auto_vpn = False
         bundle = _sample_bundle()
         bundle.pop("jwt_private_key", None)
@@ -346,6 +348,8 @@ class TestReconnectWorkflow:
     ) -> None:
         config_path = tmp_path / "coda.config"
         config_path.write_text("{}\n")
+        if os.name != "nt":
+            config_path.chmod(0o600)
         profile_path = tmp_path / "coda-self-service.ovpn"
         profile_path.write_text("client\nremote vpn.example.com 443\n")
 
@@ -354,6 +358,8 @@ class TestReconnectWorkflow:
         )
 
         settings = Settings()
+        settings.jwt_private_key = "placeholder"
+        settings.jwt_key_id = "placeholder"
         settings.self_service_token = ""
         settings.self_service_auto_vpn = True
         settings.vpn_required = True

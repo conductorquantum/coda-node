@@ -1,4 +1,17 @@
-"""Small CLI for serving and inspecting the node runtime."""
+"""Command-line interface for the Coda node runtime.
+
+Provides the ``coda`` (and ``coda-self-service``) entry points with
+subcommands:
+
+* ``start`` -- launch the FastAPI server with optional ``--token`` for
+  first-time bootstrap.
+* ``doctor`` -- print diagnostic information about the local
+  environment (OpenVPN, VPN interface, Redis, executor).
+* ``reset`` -- wipe persisted credentials, VPN profiles, and stop any
+  managed OpenVPN daemon.
+* ``stop-vpn`` -- stop the managed OpenVPN process without resetting
+  other state.
+"""
 
 from __future__ import annotations
 
@@ -17,12 +30,8 @@ from self_service.server.config import (
     PERSISTED_PRIVATE_KEY_PATH,
     Settings,
 )
-from self_service.vpn import (
-    OPENVPN_LOG_PATH,
-    OPENVPN_PID_PATH,
-    _detect_tun_interface,
-    kill_openvpn_daemon,
-)
+from self_service.vpn import OPENVPN_LOG_PATH, OPENVPN_PID_PATH, kill_openvpn_daemon
+from self_service.vpn.guard import _detect_tun_interface
 
 _BANNER_WIDTH = 48
 
@@ -160,6 +169,11 @@ def _doctor() -> int:
 
 
 def main() -> None:
+    """Entry point for the ``coda`` / ``coda-self-service`` CLI.
+
+    Parses arguments, dispatches to the appropriate subcommand, and
+    raises :class:`SystemExit` with the subcommand's return code.
+    """
     _configure_logging()
     parser = _build_parser()
     args = parser.parse_args()

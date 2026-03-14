@@ -1,4 +1,18 @@
-"""RS256 JWT helpers for node-to-cloud authentication."""
+"""RS256 JWT authentication between the node runtime and the Coda cloud.
+
+Every request from the node to the Coda API (webhooks, heartbeats,
+reconnect) is authenticated with a short-lived JWT signed with an RSA
+private key.  The cloud verifies the signature using the corresponding
+public key registered during self-service bootstrap.
+
+Key concepts:
+
+* **KeyPair** -- an RSA keypair generated locally or received from the
+  self-service endpoint.
+* **sign_token** -- creates a signed JWT for outbound requests.
+* **verify_token** / **verify_token_with_key** -- validate inbound JWTs
+  (used primarily in tests and potential future inbound auth).
+"""
 
 from __future__ import annotations
 
@@ -25,7 +39,15 @@ class KeyPair:
 
 
 def generate_keypair(key_id: str) -> KeyPair:
-    """Generate a PEM-encoded RSA keypair."""
+    """Generate a fresh PEM-encoded RSA-2048 keypair.
+
+    Args:
+        key_id: Logical identifier embedded in JWTs as the ``kid`` header.
+            Typically the QPU node identifier.
+
+    Returns:
+        A :class:`KeyPair` containing PEM-encoded private and public keys.
+    """
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=KEY_SIZE)
 
     private_pem = private_key.private_bytes(
@@ -58,7 +80,21 @@ def sign_token(
     ttl: timedelta = DEFAULT_TTL,
     key_id: str | None = None,
 ) -> str:
-    """Create a signed JWT."""
+    """Create a short-lived RS256-signed JWT.
+
+    The token carries ``sub``, ``iss``, ``iat``, and ``exp`` claims and a
+    ``kid`` header so the verifier can look up the correct public key.
+
+    Args:
+        subject: The ``sub`` claim -- usually the QPU node identifier.
+        private_key_pem: PEM-encoded RSA private key used to sign.
+        issuer: The ``iss`` claim.
+        ttl: Token lifetime from now.
+        key_id: Explicit ``kid`` header value.  Defaults to *subject*.
+
+    Returns:
+        A compact-serialised JWT string.
+    """
     now = datetime.now(UTC)
     payload = {
         "sub": subject,
@@ -76,7 +112,21 @@ def verify_token(
     *,
     issuer: str = DEFAULT_ISSUER,
 ) -> dict[str, object]:
-    """Verify a JWT using public key lookup via its ``kid`` header."""
+    """Verify and decode a JWT by resolving its ``kid`` to a public key.
+
+    Args:
+        token: The compact-serialised JWT to verify.
+        get_public_key: Callable that maps a ``kid`` string to a
+            PEM-encoded public key, or ``None`` if the key is unknown.
+        issuer: Expected ``iss`` claim value.
+
+    Returns:
+        The decoded payload as a dictionary.
+
+    Raises:
+        jwt.InvalidTokenError: If the token is malformed, the ``kid`` is
+            missing or unknown, or signature / claim validation fails.
+    """
     try:
         header = jwt.get_unverified_header(token)
     except jwt.DecodeError as exc:
@@ -106,7 +156,22 @@ def verify_token_with_key(
     *,
     issuer: str = DEFAULT_ISSUER,
 ) -> dict[str, object]:
-    """Verify a JWT with a known public key."""
+    """Verify and decode a JWT when the public key is already known.
+
+    Unlike :func:`verify_token`, this skips the ``kid`` lookup and uses
+    the provided key directly.
+
+    Args:
+        token: The compact-serialised JWT to verify.
+        public_key_pem: PEM-encoded RSA public key.
+        issuer: Expected ``iss`` claim value.
+
+    Returns:
+        The decoded payload as a dictionary.
+
+    Raises:
+        jwt.InvalidTokenError: If signature or claim validation fails.
+    """
     result: dict[str, object] = jwt.decode(
         token,
         public_key_pem,

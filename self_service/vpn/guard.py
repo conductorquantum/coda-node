@@ -1,16 +1,26 @@
-"""VPN preflight and ongoing health monitoring."""
+"""VPN preflight checks and ongoing health monitoring.
+
+The :class:`VPNGuard` runs a three-stage preflight (interface detection,
+DNS resolution, HTTP probes) and then enters a background watch loop
+that continuously re-evaluates VPN health, firing a callback whenever
+the service state changes.
+
+Platform-specific helpers detect active tunnel interfaces on macOS
+(``ifconfig``), Linux (``ip link``), and Windows (``Get-NetAdapter``).
+"""
 
 from __future__ import annotations
 
 import asyncio
 import json
 import logging
-import os
 import platform
 import socket
 import subprocess
+import time
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import urlparse
 
@@ -23,6 +33,8 @@ logger = logging.getLogger(__name__)
 
 
 class ServiceState(Enum):
+    """Overall readiness state of the node runtime."""
+
     BOOTING = "booting"
     VPN_UNAVAILABLE = "vpn_unavailable"
     READY = "ready"
@@ -31,6 +43,8 @@ class ServiceState(Enum):
 
 @dataclass(frozen=True)
 class ProbeResult:
+    """Outcome of a single HTTP health probe against a VPN endpoint."""
+
     target: str
     ok: bool
     latency_ms: float | None = None
@@ -39,6 +53,8 @@ class ProbeResult:
 
 @dataclass(frozen=True)
 class VPNStatus:
+    """Aggregate result of a VPN preflight or health check."""
+
     ok: bool
     interface_found: bool
     probes: list[ProbeResult] = field(default_factory=list)
@@ -50,9 +66,12 @@ def _parse_darwin_tun_interfaces(ifconfig_output: str) -> str | None:
     for line in ifconfig_output.splitlines():
         if line and not line[0].isspace():
             current_iface = line.split(":")[0]
-        elif current_iface and current_iface.startswith(("utun", "tun")):
-            if line.strip().startswith("inet "):
-                return current_iface
+        elif (
+            current_iface
+            and current_iface.startswith(("utun", "tun"))
+            and line.strip().startswith("inet ")
+        ):
+            return current_iface
     return None
 
 
@@ -100,7 +119,20 @@ def _parse_windows_tun_interfaces(
 
 
 def _detect_tun_interface(hint: str | None = None) -> str | None:
-    """Return the active VPN interface name, if one is detectable."""
+    """Detect an active VPN tunnel interface on the local machine.
+
+    Uses platform-specific commands (``ifconfig`` on macOS, ``ip link``
+    on Linux, ``Get-NetAdapter`` on Windows) to find a TUN/TAP adapter
+    that is currently UP.
+
+    Args:
+        hint: If provided, check only this specific interface name
+            instead of scanning all interfaces.
+
+    Returns:
+        The interface name (e.g. ``"utun3"``, ``"tun0"``) or ``None``
+        if no active VPN interface is found.
+    """
     system = platform.system()
 
     if hint:
@@ -191,8 +223,6 @@ def _detect_tun_interface(hint: str | None = None) -> str | None:
 
 
 async def _probe_target(url: str, timeout: float = 5.0) -> ProbeResult:
-    import time
-
     started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=timeout, verify=True) as client:
@@ -222,7 +252,21 @@ def _resolve_host(hostname: str) -> bool:
 
 
 class VPNGuard:
-    """Monitor VPN health and expose readiness state."""
+    """Monitor VPN health and expose readiness state.
+
+    The guard starts in :attr:`ServiceState.BOOTING` and transitions to
+    READY, VPN_UNAVAILABLE, or DEGRADED based on the preflight and
+    ongoing watch results.
+
+    Args:
+        probe_targets: HTTP URLs to probe for connectivity (typically
+            the Coda API endpoints reachable only over VPN).
+        interface_hint: Specific interface name to look for instead of
+            auto-detecting.
+        check_interval_sec: Seconds between background health checks.
+        vpn_required: When ``False``, preflight passes even without a
+            detected tunnel (useful for local development).
+    """
 
     def __init__(
         self,
@@ -247,6 +291,12 @@ class VPNGuard:
         return self._state == ServiceState.READY
 
     async def preflight(self) -> VPNStatus:
+        """Run a full VPN health check: interface, DNS, and HTTP probes.
+
+        Updates :attr:`state` and returns a :class:`VPNStatus` summary.
+        When *vpn_required* is ``False``, all checks pass regardless of
+        the actual tunnel state.
+        """
         iface = await asyncio.to_thread(_detect_tun_interface, self._interface_hint)
         interface_found = iface is not None
 
@@ -296,6 +346,16 @@ class VPNGuard:
         self,
         on_change: Callable[[ServiceState], Awaitable[None]] | None = None,
     ) -> None:
+        """Continuously monitor VPN health until :meth:`stop` is called.
+
+        Runs :meth:`preflight` every *check_interval_sec* seconds and
+        invokes *on_change* whenever the service transitions between
+        READY and DEGRADED.
+
+        Args:
+            on_change: Optional async callback invoked with the new
+                :class:`ServiceState` on each transition.
+        """
         self._running = True
         while self._running:
             await asyncio.sleep(self._check_interval)
@@ -315,10 +375,23 @@ class VPNGuard:
 
 
 def validate_key_permissions(path: str) -> bool:
+    """Check that a key file has restrictive permissions.
+
+    On POSIX systems the file must be mode ``0600`` or ``0400``.  On
+    Windows the check only verifies the file exists (NTFS ACLs are not
+    inspected).
+
+    Args:
+        path: Filesystem path to the key file.
+
+    Returns:
+        ``True`` if the file exists and has acceptable permissions.
+    """
     try:
+        p = Path(path)
         if platform.system() == "Windows":
-            return os.path.isfile(path)
-        mode = os.stat(path).st_mode & 0o777
+            return p.is_file()
+        mode = p.stat().st_mode & 0o777
         return mode in (0o600, 0o400)
     except OSError:
         return False

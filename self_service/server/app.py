@@ -1,4 +1,10 @@
-"""FastAPI application for the standalone Coda-connected node server."""
+"""FastAPI application for the standalone Coda-connected node server.
+
+The application is constructed via :func:`create_app`, which wires up a
+lifespan that boots the VPN guard, Redis consumer, and webhook client.
+A module-level ``app`` instance is provided for ``uvicorn`` import-string
+references (``self_service.server.app:app``).
+"""
 
 from __future__ import annotations
 
@@ -29,6 +35,26 @@ async def _on_vpn_state_change(state: ServiceState) -> None:
 
 
 def create_app(executor: JobExecutor | None = None) -> FastAPI:
+    """Build a fully-wired FastAPI application.
+
+    The returned app uses an async lifespan that:
+
+    1. Loads ``Settings`` from environment / persisted config.
+    2. Connects to the Coda cloud (bootstrap or JWT reconnect).
+    3. Runs a VPN preflight check and starts background monitoring.
+    4. Opens a Redis consumer loop that dispatches jobs to *executor*.
+    5. On shutdown, drains in-flight work and tears down resources.
+
+    Args:
+        executor: Custom execution backend.  When ``None``, the executor
+            is resolved from ``CODA_EXECUTOR_FACTORY`` or falls back to
+            :class:`~self_service.server.executor.NoopExecutor`.
+
+    Returns:
+        A configured :class:`~fastapi.FastAPI` instance with ``/health``
+        and ``/ready`` endpoints.
+    """
+
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         settings = Settings()

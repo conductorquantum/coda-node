@@ -1,15 +1,22 @@
-"""VPN monitoring and self-service bootstrap exports."""
+"""VPN tunnel management, health monitoring, and self-service provisioning.
+
+This package handles the full VPN lifecycle for a Coda-connected node:
+
+* **Preflight** -- detect an active tunnel interface and probe
+  connectivity to the cloud endpoints before the server accepts jobs.
+* **Background monitoring** -- periodically re-check VPN health and
+  transition the service state between READY, DEGRADED, and
+  VPN_UNAVAILABLE.
+* **Self-service bootstrap** -- given a one-time token, fetch
+  credentials and a VPN profile from the Coda cloud, start an OpenVPN
+  daemon, and persist everything for future reconnects.
+"""
 
 from self_service.vpn.guard import (
     ProbeResult,
     ServiceState,
     VPNGuard,
     VPNStatus,
-    _detect_tun_interface,
-    _parse_darwin_tun_interfaces,
-    _parse_windows_tun_interfaces,
-    _probe_target,
-    _resolve_host,
     validate_key_permissions,
 )
 from self_service.vpn.service import (
@@ -33,11 +40,6 @@ __all__ = [
     "ServiceState",
     "VPNGuard",
     "VPNStatus",
-    "_detect_tun_interface",
-    "_parse_darwin_tun_interfaces",
-    "_parse_windows_tun_interfaces",
-    "_probe_target",
-    "_resolve_host",
     "apply_self_service_bundle",
     "connect_settings",
     "ensure_persisted_vpn",

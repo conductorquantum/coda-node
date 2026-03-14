@@ -1,4 +1,20 @@
-"""Redis stream consumer for Coda job execution."""
+"""Redis Streams consumer that reads jobs and dispatches them to an executor.
+
+The consumer uses a Redis consumer group so that multiple workers can
+share a single stream.  On startup it performs crash recovery for
+messages that were claimed but never acknowledged (e.g. after an
+unclean shutdown).
+
+Message lifecycle:
+
+1. ``XREADGROUP`` blocks for new messages on ``qpu:<qpu_id>:jobs``.
+2. Each message is deserialized into a :class:`NativeGateIR` and handed
+   to the :class:`~self_service.server.executor.JobExecutor`.
+3. The result (or error) is posted back via
+   :class:`~self_service.server.webhook.WebhookClient`.
+4. The message is ``XACK``-ed regardless of success or failure so it
+   does not re-enter the pending list.
+"""
 
 from __future__ import annotations
 
@@ -6,7 +22,6 @@ import asyncio
 import inspect
 import logging
 from collections.abc import Awaitable
-from dataclasses import dataclass
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypeVar, cast
 
@@ -29,18 +44,20 @@ async def _await_if_needed(value: T | Awaitable[T]) -> T:
     return value
 
 
-@dataclass(slots=True)
-class Job:
-    id: str
-    ir: NativeGateIR
-    shots: int
-    callback_url: str
-    message_id: str
-    retry_count: int = 0
-
-
 class RedisConsumer:
-    """Consume jobs from a Coda Redis stream and dispatch to an executor."""
+    """Consume jobs from a Coda Redis stream and dispatch to an executor.
+
+    Args:
+        redis: An async Redis client instance.
+        runner: The execution backend that processes each job.
+        webhook: Client for posting results back to the Coda cloud.
+        qpu_id: QPU identifier used to derive stream and group names.
+        consumer_name: Name of this consumer within the group (for
+            distinguishing workers in a multi-process deployment).
+        crash_recovery_threshold_ms: Minimum idle time (in ms) before a
+            pending message is considered abandoned and eligible for
+            reprocessing.
+    """
 
     def __init__(
         self,
@@ -65,6 +82,11 @@ class RedisConsumer:
         self.redis_healthy = True
 
     async def setup(self) -> None:
+        """Create the consumer group if it does not already exist.
+
+        The stream is created automatically (``mkstream=True``) so that
+        the consumer can start before any jobs have been enqueued.
+        """
         try:
             await self._redis.xgroup_create(
                 name=self._stream,
@@ -77,6 +99,14 @@ class RedisConsumer:
                 raise
 
     async def recover_pending(self) -> int:
+        """Re-process messages left pending after an unclean shutdown.
+
+        Only messages idle for longer than *crash_recovery_threshold_ms*
+        are recovered, to avoid stealing work from a still-running peer.
+
+        Returns:
+            The number of messages that were reprocessed.
+        """
         recovered = 0
         pending = await self._redis.xpending_range(
             name=self._stream,
@@ -104,6 +134,13 @@ class RedisConsumer:
         return recovered
 
     async def consume_loop(self) -> None:
+        """Run the main consume loop until :meth:`stop` is called.
+
+        On each iteration the loop blocks (up to 5 s) for a new message
+        via ``XREADGROUP``.  Connection errors trigger a 5 s backoff;
+        unexpected errors trigger a 1 s backoff.  The loop sets
+        :attr:`redis_healthy` to reflect the current connection state.
+        """
         self._running = True
         await self.setup()
         await self.recover_pending()
@@ -134,6 +171,7 @@ class RedisConsumer:
                 await asyncio.sleep(1)
 
     def stop(self) -> None:
+        """Signal the consume loop to exit after the current iteration."""
         self._running = False
 
     async def _process_message(self, message_id: str, fields: dict[str, str]) -> None:

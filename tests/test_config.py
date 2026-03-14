@@ -2,6 +2,7 @@
 
 import json
 import os
+from pathlib import Path
 
 import pytest
 
@@ -10,22 +11,12 @@ from self_service.server.config import Settings
 
 
 @pytest.fixture(autouse=True)
-def jwt_env(monkeypatch: pytest.MonkeyPatch) -> None:
+def _jwt_env(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv(
         "CODA_JWT_PRIVATE_KEY",
         "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
     )
     monkeypatch.setenv("CODA_JWT_KEY_ID", "test-key-id")
-
-
-@pytest.fixture(autouse=True)
-def isolate_persisted_runtime_paths(monkeypatch: pytest.MonkeyPatch, tmp_path) -> None:
-    monkeypatch.setattr(
-        config_module, "PERSISTED_CONFIG_PATH", tmp_path / "coda.config"
-    )
-    monkeypatch.setattr(
-        config_module, "PERSISTED_PRIVATE_KEY_PATH", tmp_path / "coda-private-key"
-    )
 
 
 class TestSettings:
@@ -91,7 +82,7 @@ class TestSettings:
         assert settings.self_service_token == "self-service-token"
 
     def test_loads_persisted_runtime_config(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
         config_path = tmp_path / "coda.config"
         key_path = tmp_path / "coda-private-key"

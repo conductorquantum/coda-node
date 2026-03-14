@@ -1,4 +1,28 @@
-"""Single-token self-service provisioning and optional VPN bootstrap."""
+"""Self-service provisioning, credential persistence, and OpenVPN management.
+
+This module implements the full bootstrap and reconnect lifecycle:
+
+1. **First run** -- the operator provides a one-time ``CODA_SELF_SERVICE_TOKEN``.
+   The runtime POSTs to ``/api/internal/qpu/connect`` with the token,
+   receives a bundle containing JWT credentials, Redis URL, API paths,
+   and optionally a VPN client profile.
+2. **VPN setup** -- if the bundle includes a profile, the runtime
+   writes it to disk (after sanitizing dangerous directives), launches
+   an OpenVPN daemon, and polls for a tunnel interface.
+3. **Persistence** -- credentials and config are written to disk with
+   ``0600`` permissions so the next restart can reconnect without a
+   fresh token.
+4. **Reconnect** -- on subsequent starts, the runtime reads persisted
+   state, brings up the VPN tunnel, and authenticates with its stored
+   JWT key.
+
+Security notes:
+
+* VPN profiles are scanned for shell-execution directives (``up``,
+  ``down``, ``plugin``, etc.) and rejected if any are found.
+* Private keys and config files are written with ``0600`` permissions
+  and validated on read.
+"""
 
 from __future__ import annotations
 
@@ -11,6 +35,7 @@ import signal
 import socket
 import subprocess
 import tempfile
+import time
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -34,7 +59,11 @@ _TUNNEL_TIMEOUT = 30.0
 
 
 class SelfServiceError(RuntimeError):
-    """Raised when self-service provisioning fails."""
+    """Raised when self-service provisioning or VPN setup fails.
+
+    Covers token validation errors, HTTP failures from the Coda API,
+    missing VPN profiles, OpenVPN launch failures, and tunnel timeouts.
+    """
 
 
 def _machine_fingerprint() -> str:
@@ -79,7 +108,7 @@ def _write_secure_text(path: Path, content: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(content)
     if os.name != "nt":
-        os.chmod(path, 0o600)
+        path.chmod(0o600)
 
 
 def _persist_runtime_config(settings: Settings) -> None:
@@ -178,6 +207,15 @@ def _read_openvpn_log_tail(max_lines: int = 20) -> str:
 
 
 def kill_openvpn_daemon() -> bool:
+    """Terminate the managed OpenVPN daemon and clean up its PID file.
+
+    Uses ``SIGTERM`` on POSIX and ``taskkill`` on Windows.  Silently
+    succeeds if the process is already gone.
+
+    Returns:
+        ``True`` if a process was found and signalled, ``False`` if no
+        PID file existed.
+    """
     if not OPENVPN_PID_PATH.exists():
         return False
 
@@ -205,8 +243,6 @@ async def _wait_for_tunnel(
     timeout: float = _TUNNEL_TIMEOUT,
     poll_interval: float = _TUNNEL_POLL_INTERVAL,
 ) -> str:
-    import time
-
     from self_service.vpn.guard import _detect_tun_interface
 
     deadline = time.monotonic() + timeout
@@ -264,6 +300,22 @@ async def _post_connect(
 
 
 async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
+    """Fetch the provisioning bundle using a one-time bootstrap token.
+
+    POSTs the machine fingerprint and OPX connection details to the
+    Coda connect endpoint.  The returned bundle contains JWT keys,
+    Redis URL, API paths, and optional VPN configuration.
+
+    Args:
+        settings: Runtime settings (must have a non-empty
+            ``self_service_token``).
+
+    Returns:
+        The raw bundle dictionary from the Coda API.
+
+    Raises:
+        SelfServiceError: If the token is empty or the HTTP request fails.
+    """
     if not settings.self_service_token:
         raise SelfServiceError("self-service token is empty")
 
@@ -280,6 +332,22 @@ async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
 
 
 async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
+    """Fetch a reconnect bundle using stored JWT credentials.
+
+    Authenticates with a freshly signed JWT (instead of a bootstrap
+    token) to get an updated bundle.  The server may refresh Redis
+    URLs, API paths, or VPN configuration.
+
+    Args:
+        settings: Runtime settings with valid ``jwt_private_key`` and
+            ``jwt_key_id``.
+
+    Returns:
+        The raw bundle dictionary from the Coda API.
+
+    Raises:
+        SelfServiceError: If the HTTP request fails.
+    """
     payload = {
         "machine_fingerprint": _resolve_machine_fingerprint(settings),
         "opx_host": settings.opx_host,
@@ -298,6 +366,23 @@ async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
 
 
 async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) -> None:
+    """Apply a self-service bundle to the runtime settings.
+
+    Mutates *settings* in place with QPU identity, JWT credentials,
+    Redis URL, API paths, and VPN configuration from the bundle.  If
+    ``self_service_auto_vpn`` is enabled and the bundle includes a VPN
+    profile, the profile is written to disk and an OpenVPN daemon is
+    started (unless a tunnel is already active).
+
+    Args:
+        settings: The mutable runtime settings object.
+        bundle: Raw JSON bundle from :func:`fetch_self_service_bundle`
+            or :func:`fetch_reconnect_bundle`.
+
+    Raises:
+        SelfServiceError: If required fields are missing or the VPN
+            setup fails.
+    """
     settings.qpu_id = _as_str(bundle, "qpu_id")
     settings.qpu_display_name = _as_str(bundle, "qpu_display_name")
     settings.native_gate_set = _as_str(bundle, "native_gate_set")
@@ -380,6 +465,21 @@ async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) 
 
 
 async def connect_settings(settings: Settings) -> None:
+    """Bootstrap or reconnect the node to the Coda cloud.
+
+    On first run (token present), fetches a self-service bundle.  On
+    subsequent runs (no token), restores the persisted VPN tunnel and
+    fetches a reconnect bundle with stored JWT credentials.
+
+    After the bundle is applied and config is persisted, any failure
+    triggers cleanup of a potentially half-started VPN daemon.
+
+    Args:
+        settings: Runtime settings to populate.
+
+    Raises:
+        SelfServiceError: On bootstrap or reconnect failure.
+    """
     _resolve_machine_fingerprint(settings)
     if settings.self_service_token:
         bundle = await fetch_self_service_bundle(settings)
@@ -396,10 +496,26 @@ async def connect_settings(settings: Settings) -> None:
 
 
 async def self_service_settings(settings: Settings) -> None:
+    """Alias for :func:`connect_settings` (backward compatibility)."""
     await connect_settings(settings)
 
 
 async def ensure_persisted_vpn(settings: Settings) -> None:
+    """Restore a previously configured VPN tunnel for reconnect.
+
+    If a persisted config and VPN profile exist, and no tunnel is
+    currently active, starts an OpenVPN daemon and waits for the
+    interface to come up.  No-ops if auto VPN is disabled or no
+    persisted config is found.
+
+    Args:
+        settings: Runtime settings with VPN profile path and interface
+            hint.
+
+    Raises:
+        SelfServiceError: If VPN is required but the persisted profile
+            is missing, or if the tunnel fails to come up.
+    """
     if not PERSISTED_CONFIG_PATH.exists():
         return
 

@@ -6,16 +6,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from self_service.vpn import (
-    ServiceState,
-    VPNGuard,
-    VPNStatus,
+from self_service.vpn import ServiceState, VPNGuard, VPNStatus, validate_key_permissions
+from self_service.vpn.guard import (
     _detect_tun_interface,
     _parse_darwin_tun_interfaces,
     _parse_windows_tun_interfaces,
     _probe_target,
     _resolve_host,
-    validate_key_permissions,
 )
 
 
