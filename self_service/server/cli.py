@@ -3,15 +3,22 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import os
 import shutil
+import tempfile
 from pathlib import Path
 
 import uvicorn
 
-from self_service.server.config import Settings
+from self_service.server.config import (
+    PERSISTED_CONFIG_PATH,
+    PERSISTED_PRIVATE_KEY_PATH,
+    Settings,
+)
 from self_service.vpn import (
+    OPENVPN_LOG_PATH,
     OPENVPN_PID_PATH,
     _detect_tun_interface,
     kill_openvpn_daemon,
@@ -34,13 +41,21 @@ def _build_parser() -> argparse.ArgumentParser:
     start_parent.add_argument("-t", "--token", dest="self_service_token")
 
     parser = argparse.ArgumentParser(prog="coda")
-    subparsers = parser.add_subparsers(dest="command", required=True)
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Clear persisted runtime state and VPN artifacts",
+    )
+    subparsers = parser.add_subparsers(dest="command", required=False)
 
     subparsers.add_parser(
         "start", parents=[start_parent], help="Run the FastAPI server"
     )
 
     subparsers.add_parser("doctor", help="Print basic runtime checks")
+    subparsers.add_parser(
+        "reset", help="Clear persisted runtime state and VPN artifacts"
+    )
     subparsers.add_parser("stop-vpn", help="Stop the managed OpenVPN process")
     return parser
 
@@ -79,6 +94,50 @@ def _start_mode(token: str) -> str:
     return "token" if token else "env"
 
 
+def _read_reset_paths() -> list[Path]:
+    paths = {
+        PERSISTED_CONFIG_PATH,
+        PERSISTED_PRIVATE_KEY_PATH,
+        OPENVPN_PID_PATH,
+        OPENVPN_LOG_PATH,
+        Path(f"{tempfile.gettempdir()}/coda-self-service.ovpn"),
+    }
+    if PERSISTED_CONFIG_PATH.exists():
+        try:
+            data = json.loads(PERSISTED_CONFIG_PATH.read_text())
+        except (OSError, json.JSONDecodeError):
+            data = {}
+        if isinstance(data, dict):
+            for key in ("jwt_private_key_path", "self_service_vpn_profile_path"):
+                value = data.get(key)
+                if isinstance(value, str) and value:
+                    paths.add(Path(value))
+    return sorted(paths)
+
+
+def _reset() -> int:
+    killed = kill_openvpn_daemon()
+    print("Resetting persisted Coda runtime state...")
+    print(
+        "  ✓ Stopped managed OpenVPN daemon"
+        if killed
+        else "  No managed VPN process found"
+    )
+
+    removed_any = False
+    for path in _read_reset_paths():
+        if path.exists():
+            path.unlink()
+            removed_any = True
+            print(f"  ✓ Removed {path}")
+        else:
+            print(f"  - Not found {path}")
+
+    if not removed_any:
+        print("  No persisted runtime files found")
+    return 0
+
+
 def _doctor() -> int:
     settings = Settings()
     openvpn_bin = shutil.which("openvpn") or shutil.which("openvpn.exe")
@@ -104,6 +163,9 @@ def main() -> None:
     _configure_logging()
     parser = _build_parser()
     args = parser.parse_args()
+
+    if args.reset or args.command == "reset":
+        raise SystemExit(_reset())
 
     if args.command == "start":
         _apply_overrides(args)
@@ -137,3 +199,5 @@ def main() -> None:
             else "  No managed VPN process found"
         )
         raise SystemExit(0 if killed else 1)
+
+    parser.error("a command is required")
