@@ -143,6 +143,8 @@ def test_doctor_loads_persisted_runtime_without_recursing(
     monkeypatch.setenv("CODA_JWT_PRIVATE_KEY", "")
     monkeypatch.setenv("CODA_JWT_KEY_ID", "")
     monkeypatch.delenv("CODA_SELF_SERVICE_TOKEN", raising=False)
+    monkeypatch.delenv("CODA_WEBAPP_URL", raising=False)
+    monkeypatch.delenv("CODA_REDIS_URL", raising=False)
     monkeypatch.setattr(cli.shutil, "which", MagicMock(return_value=None))
     monkeypatch.setattr(cli, "detect_tun_interface", MagicMock(return_value=None))
 
