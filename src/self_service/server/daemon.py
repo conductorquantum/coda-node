@@ -53,7 +53,8 @@ def _process_exists(pid: int) -> bool:
     try:
         os.kill(pid, 0)
         return True
-    except (ProcessLookupError, PermissionError):
+    except (ProcessLookupError, PermissionError, OSError):
+        # OSError covers Windows-specific errors like WinError 87
         return False
 
 
