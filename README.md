@@ -9,7 +9,7 @@ Coda.
 
 ## What It Does
 
-- Bootstraps a node from a one-time self-service token
+- Provisions a node from a one-time self-service token
 - Reconnects on restart with persisted JWT credentials
 - Verifies and continuously monitors VPN connectivity
 - Consumes jobs from Redis Streams with crash recovery
@@ -30,16 +30,16 @@ Requires Python 3.11+.  Two equivalent CLI entry points are installed:
 
 ## Quick Start
 
-Bootstrap with a self-service token:
+Provision with a self-service token:
 
 ```bash
-uv run coda start --token <bootstrap-token>
+uv run coda start --token <self-service-token>
 ```
 
 Or set the token as an environment variable:
 
 ```bash
-export CODA_SELF_SERVICE_TOKEN=<bootstrap-token>
+export CODA_SELF_SERVICE_TOKEN=<self-service-token>
 uv run coda start
 ```
 
@@ -52,7 +52,7 @@ On startup the runtime:
 
 1. Loads configuration from `CODA_`-prefixed environment variables, then
    persisted state on disk, then hardcoded defaults.
-2. Connects to Coda using either a bootstrap token or persisted JWT
+2. Connects to Coda using either a self-service token or persisted JWT
    credentials (with exponential-backoff retry on transient failures).
 3. Brings up or validates VPN connectivity when required.
 4. Starts the FastAPI service and a background Redis Streams consumer.
@@ -83,7 +83,7 @@ previously persisted config from disk.
 
 | Variable | Default | Description |
 |---|---|---|
-| `CODA_SELF_SERVICE_TOKEN` | `""` | One-time bootstrap token for first-run provisioning. |
+| `CODA_SELF_SERVICE_TOKEN` | `""` | One-time self-service token for first-run provisioning. |
 | `CODA_JWT_PRIVATE_KEY` | `""` | PEM-encoded RSA private key for direct JWT startup. |
 | `CODA_JWT_KEY_ID` | `""` | `kid` header value for signed JWTs. |
 | `CODA_REDIS_URL` | `""` | Redis connection string (`redis://…`). |
@@ -114,7 +114,7 @@ Provide either `CODA_SELF_SERVICE_TOKEN` for auto-provisioning, or both
 
 ## Persisted State
 
-After a successful bootstrap the runtime writes:
+After a successful self-service provisioning the runtime writes:
 
 | File | Contents |
 |---|---|
@@ -134,7 +134,7 @@ To wipe persisted state, run `coda reset`.
 coda start [--token TOKEN] [--host HOST] [--port PORT]
 ```
 
-Start the node server.  Pass `--token` on first run for bootstrap.
+Start the node server.  Pass `--token` on first run for self-service provisioning.
 
 ```
 coda doctor
@@ -201,7 +201,7 @@ distinguish expected operational errors from unexpected bugs:
 | `ConfigError` | Invalid or missing configuration. |
 | `AuthError` | JWT signing or verification failure. |
 | `VPNError` | VPN tunnel or health check failure. |
-| `SelfServiceError` | Bootstrap, connect, or reconnect failure. |
+| `SelfServiceError` | Self-service provisioning or reconnect failure. |
 | `ExecutorError` | Executor loading or job execution failure. |
 | `WebhookError` | Webhook delivery failure. |
 

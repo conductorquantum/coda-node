@@ -1,6 +1,6 @@
 """Self-service provisioning, credential persistence, and OpenVPN management.
 
-This module implements the full bootstrap and reconnect lifecycle:
+This module implements the full self-service and reconnect lifecycle:
 
 1. **First run** -- the operator provides a one-time ``CODA_SELF_SERVICE_TOKEN``.
    The runtime POSTs to ``/api/internal/qpu/connect`` with the token,
@@ -366,7 +366,7 @@ async def _post_connect(
 
 
 async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
-    """Fetch the provisioning bundle using a one-time bootstrap token.
+    """Fetch the provisioning bundle using a one-time self-service token.
 
     POSTs the machine fingerprint and OPX connection details to the
     Coda connect endpoint.  The returned bundle contains JWT keys,
@@ -401,7 +401,7 @@ async def fetch_self_service_bundle(settings: Settings) -> dict[str, Any]:
 async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
     """Fetch a reconnect bundle using stored JWT credentials.
 
-    Authenticates with a freshly signed JWT (instead of a bootstrap
+    Authenticates with a freshly signed JWT (instead of a self-service
     token) to get an updated bundle.  The server may refresh Redis
     URLs, API paths, or VPN configuration.
 
@@ -533,7 +533,7 @@ async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) 
 
 
 async def connect_settings(settings: Settings) -> None:
-    """Bootstrap or reconnect the node to the Coda cloud.
+    """Provision or reconnect the node to the Coda cloud.
 
     On first run (token present), fetches a self-service bundle.  On
     subsequent runs (no token), restores the persisted VPN tunnel and
@@ -546,7 +546,7 @@ async def connect_settings(settings: Settings) -> None:
         settings: Runtime settings to populate.
 
     Raises:
-        SelfServiceError: On bootstrap or reconnect failure.
+        SelfServiceError: On provisioning or reconnect failure.
     """
     _resolve_machine_fingerprint(settings)
     if settings.self_service_token:
@@ -594,7 +594,7 @@ async def ensure_persisted_vpn(settings: Settings) -> None:
     if not profile_path.exists():
         if settings.vpn_required:
             raise SelfServiceError(
-                "Persisted VPN profile not found. Re-run self-service bootstrap with a new token."
+                "Persisted VPN profile not found. Re-run self-service provisioning with a new token."
             )
         return
 

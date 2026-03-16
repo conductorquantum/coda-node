@@ -56,10 +56,10 @@ VPN tunnel or health check failure.
 
 ### `SelfServiceError`
 
-Bootstrap, connect, or reconnect failure. Subclass of `VPNError`.
+Self-service provisioning or reconnect failure. Subclass of `VPNError`.
 
 **Raised when:**
-- The bootstrap token is empty.
+- The self-service token is empty.
 - The connect HTTP request fails (after retries).
 - The cloud returns a 4xx error.
 - The connect response is missing required fields.
@@ -117,7 +117,8 @@ from self_service.errors import (
 ## Design Rationale
 
 - `SelfServiceError` inherits from `VPNError` because self-service
-  failures are most commonly VPN-related (profile provisioning, tunnel
-  setup) and callers often want to catch both with a single clause.
+  failures are most commonly VPN-related (profile provisioning,
+  tunnel setup) and callers often want to catch both with a single
+  clause.
 - Each exception type maps to a specific subsystem, making it easy to
   route errors to the appropriate handler or monitoring system.

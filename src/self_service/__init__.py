@@ -8,7 +8,7 @@ webhook delivery so that backend authors only need to implement the
 
 Typical usage::
 
-    uv run coda start --token <bootstrap-token>
+    uv run coda start --token <self-service-token>
 """
 
 from self_service.errors import CodaError

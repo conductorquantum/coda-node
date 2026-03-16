@@ -7,7 +7,7 @@ Complete field reference for the `Settings` class in
 
 | Field | Type | Default | Env Var | Description |
 |---|---|---|---|---|
-| `qpu_id` | `str` | `""` | `CODA_QPU_ID` | QPU identifier (set during bootstrap). |
+| `qpu_id` | `str` | `""` | `CODA_QPU_ID` | QPU identifier (set during self-service). |
 | `qpu_display_name` | `str` | `""` | `CODA_QPU_DISPLAY_NAME` | Human-readable QPU name. |
 | `native_gate_set` | `str` | `"superconducting_cz"` | `CODA_NATIVE_GATE_SET` | Hardware target gate set. |
 | `num_qubits` | `int` | `5` | `CODA_NUM_QUBITS` | Number of qubits on the device. |
@@ -37,7 +37,7 @@ Complete field reference for the `Settings` class in
 |---|---|---|---|---|
 | `jwt_private_key` | `str` | `""` | `CODA_JWT_PRIVATE_KEY` | PEM-encoded RSA private key. |
 | `jwt_key_id` | `str` | `""` | `CODA_JWT_KEY_ID` | JWT `kid` header value. |
-| `self_service_token` | `str` | `""` | `CODA_SELF_SERVICE_TOKEN` | One-time bootstrap token. |
+| `self_service_token` | `str` | `""` | `CODA_SELF_SERVICE_TOKEN` | One-time self-service token. |
 
 ## VPN
 

@@ -23,7 +23,7 @@ Settings are resolved with the following priority (highest first):
 
 1. **Environment variables** — `CODA_`-prefixed (e.g. `CODA_REDIS_URL`).
 2. **Persisted runtime config** — from `/tmp/coda.config` (written
-   after successful bootstrap).
+   after successful self-service provisioning).
 3. **Hardcoded defaults** — defined on the `Settings` class.
 
 Persisted values only apply when no `self_service_token` is set and the
@@ -41,7 +41,7 @@ Two model validators enforce constraints:
 
 Merges persisted config into the settings dict before field validation.
 Skipped when a self-service token is present (to avoid overriding a
-fresh bootstrap with stale state).
+fresh provisioning with stale state).
 
 ### `check_jwt_or_self_service` (mode="after")
 

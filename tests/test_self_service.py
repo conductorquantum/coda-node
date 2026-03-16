@@ -1,4 +1,4 @@
-"""Tests for self-service provisioning and VPN bootstrap."""
+"""Tests for self-service provisioning and VPN tunnel setup."""
 
 import json
 import os

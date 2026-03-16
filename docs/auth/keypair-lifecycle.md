@@ -2,7 +2,7 @@
 
 ## Generation
 
-### On the Cloud (Bootstrap)
+### On the Cloud (Self-Service)
 
 During `buildSelfServiceResponse()`, the cloud generates a fresh
 RS256 keypair using Node.js `crypto.generateKeyPairSync()`:
@@ -18,8 +18,8 @@ const { privateKey, publicKey } = generateKeyPairSync("rsa", {
 The key ID follows the format `qpu-{qpuId}-{timestamp}`.
 
 The **public key** is stored in the cloud's `jwt_keys` table.
-The **private key** is returned to the node in the connect response
-and never stored on the cloud.
+The **private key** is returned to the node in the connect response and
+never stored on the cloud.
 
 ### On the Node (Testing)
 
@@ -32,7 +32,7 @@ keypair = generate_keypair("my-qpu")
 ```
 
 This is not used in production — the cloud generates and distributes
-keypairs during bootstrap.
+keypairs during self-service provisioning.
 
 ## Storage
 
@@ -50,13 +50,13 @@ The public key is stored in the `jwt_keys` table:
 ### Node Side
 
 The private key is persisted to `/tmp/coda-private-key` with `0600`
-permissions (see [credential-persistence.md](../bootstrap/credential-persistence.md)).
+permissions (see [credential-persistence.md](../self-service/credential-persistence.md)).
 
 The key ID is stored in `/tmp/coda.config` as `jwt_key_id`.
 
 ## Rotation
 
-Key rotation happens automatically during re-bootstrap:
+Key rotation happens automatically during re-provisioning:
 
 1. A new keypair is generated.
 2. The new public key is inserted into `jwt_keys`.
@@ -82,10 +82,11 @@ the correct key.
 ## Security Properties
 
 - The private key is generated on the cloud and transmitted to the
-  node exactly once during bootstrap. It is never stored on the cloud.
+  node exactly once during self-service. It is never stored on the
+  cloud.
 - The private key is stored on the node's filesystem with `0600`
   permissions and validated on read.
 - Key rotation happens atomically — the old key is revoked only after
   the new key and device update succeed.
-- If bootstrap fails (e.g. VPN provisioning fails), the newly created
-  key is deleted to prevent stale credential leaks.
+- If provisioning fails (e.g. VPN provisioning fails), the newly
+  created key is deleted to prevent stale credential leaks.

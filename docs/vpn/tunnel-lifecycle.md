@@ -113,7 +113,8 @@ On reconnect (`ensure_persisted_vpn()` in `vpn/service.py`):
 3. If the VPN profile file exists and no tunnel is currently active,
    starts the OpenVPN daemon and waits for the interface.
 4. If VPN is required but the profile is missing, raises
-   `SelfServiceError` telling the operator to re-bootstrap.
+   `SelfServiceError` telling the operator to re-provision with a new
+   token.
 
 ## File Locations
 

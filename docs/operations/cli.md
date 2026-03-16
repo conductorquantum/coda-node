@@ -13,7 +13,7 @@ coda start [--token TOKEN] [--host HOST] [--port PORT]
 
 | Flag | Env Override | Description |
 |---|---|---|
-| `--token`, `-t` | `CODA_SELF_SERVICE_TOKEN` | Bootstrap token for first-time provisioning. |
+| `--token`, `-t` | `CODA_SELF_SERVICE_TOKEN` | Self-service token for first-time provisioning. |
 | `--host`, `-H` | `CODA_HOST` | Bind address (default: `0.0.0.0`). |
 | `--port`, `-p` | `CODA_PORT` | Bind port (default: `8080`). |
 
@@ -21,7 +21,7 @@ CLI flags are injected into environment variables before `Settings` is
 constructed, so they take highest precedence.
 
 On startup, a banner is printed showing the webapp URL, bind endpoint,
-and bootstrap mode (`token` or `env`).
+and startup mode (`token` or `env`).
 
 The server runs under uvicorn with `reload=False` and
 `log_level="warning"`.
@@ -69,7 +69,7 @@ Actions:
    - Any additional paths referenced in the config file
      (`jwt_private_key_path`, `self_service_vpn_profile_path`).
 
-After reset, the node must be re-bootstrapped with a fresh token.
+After reset, the node must be re-provisioned with a fresh self-service token.
 
 Also available as a global flag: `coda --reset`.
 

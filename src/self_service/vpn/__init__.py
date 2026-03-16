@@ -7,7 +7,7 @@ This package handles the full VPN lifecycle for a Coda-connected node:
 * **Background monitoring** -- periodically re-check VPN health and
   transition the service state between READY, DEGRADED, and
   VPN_UNAVAILABLE.
-* **Self-service bootstrap** -- given a one-time token, fetch
+* **Self-service provisioning** -- given a one-time token, fetch
   credentials and a VPN profile from the Coda cloud, start an OpenVPN
   daemon, and persist everything for future reconnects.
 """

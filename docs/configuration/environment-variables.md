@@ -10,7 +10,7 @@ including type coercion for booleans, integers, and lists.
 
 | Variable | Description |
 |---|---|
-| `CODA_SELF_SERVICE_TOKEN` | One-time bootstrap token. Provides all other settings automatically. |
+| `CODA_SELF_SERVICE_TOKEN` | One-time self-service token. Provides all other settings automatically. |
 | `CODA_JWT_PRIVATE_KEY` + `CODA_JWT_KEY_ID` | Direct JWT startup (requires pre-provisioned credentials). |
 
 ### Commonly Set
@@ -49,9 +49,9 @@ including type coercion for booleans, integers, and lists.
 | `CODA_OPX_PORT` | `80` | OPX controller port. |
 | `CODA_ADVERTISED_PROVIDER` | `coda` | Provider name. |
 
-### Auto-Populated (set by bootstrap)
+### Auto-Populated (set by self-service)
 
-These are populated from the connect response during bootstrap and
+These are populated from the connect response during self-service and
 persisted to disk. They do not need to be set manually:
 
 - `CODA_QPU_ID`

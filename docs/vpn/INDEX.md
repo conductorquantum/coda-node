@@ -3,7 +3,7 @@
 The VPN subsystem provides secure network connectivity between the
 QPU node and the Coda cloud. It handles three concerns:
 
-1. **Provisioning** — receiving an OpenVPN profile during bootstrap,
+1. **Provisioning** — receiving an OpenVPN profile during self-service,
    validating it for safety, and launching a managed daemon.
 2. **Health monitoring** — detecting the tunnel interface, probing
    cloud endpoints, and continuously evaluating VPN health.

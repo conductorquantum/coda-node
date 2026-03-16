@@ -11,3 +11,9 @@ repos:
         entry: uv run ruff check .
         language: system
         pass_filenames: false
+      - id: update-docs
+        name: Update docs
+        entry: bash -c 'claude -p --append-system-prompt "$(cat .claude/skills/update-docs.md)" "Review the staged diff and update any docs that are out of date. If nothing needs updating, do nothing."'
+        language: system
+        pass_filenames: false
+        stages: [pre-commit]

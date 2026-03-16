@@ -1,6 +1,6 @@
 # Credential Persistence
 
-After a successful bootstrap or reconnect, the node writes runtime
+After a successful self-service provisioning or reconnect, the node writes runtime
 state to disk so subsequent restarts can reconnect without a fresh
 token.
 
@@ -75,7 +75,7 @@ succeeds.
 This is invoked by the `Settings` Pydantic model validator
 `merge_persisted_runtime_config()`, which runs at model construction
 time. It only applies persisted values when no `self_service_token` is
-set (to avoid overriding a fresh bootstrap with stale state).
+set (to avoid overriding a fresh provisioning with stale state).
 
 ## Precedence Order
 
@@ -85,7 +85,7 @@ Settings are resolved with the following priority (highest first):
 2. **Persisted config** — loaded from `/tmp/coda.config`.
 3. **Hardcoded defaults** — defined on the `Settings` class.
 
-A persisted value only fills in a field if the environment did not
+A persisted value only fills in a field when the environment has not
 already set it (i.e., the current value is empty, `None`, or `[]`).
 
 ## Security

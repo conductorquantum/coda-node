@@ -5,8 +5,8 @@ Configuration is resolved in three layers (highest priority first):
 1. **Environment variables** prefixed with ``CODA_`` (e.g.
    ``CODA_REDIS_URL``).
 2. **Persisted runtime config** written to ``/tmp/coda.config`` after a
-   successful self-service bootstrap, so later restarts can reconnect
-   without a fresh bootstrap token.
+   successful self-service provisioning, so later restarts can reconnect
+   without a fresh token.
 3. **Hardcoded defaults** defined on :class:`Settings`.
 
 The persisted private key is stored separately at

@@ -3,7 +3,7 @@
 All communication between the node and the Coda cloud is authenticated
 with RS256 JWTs. The node signs tokens with its private key; the cloud
 verifies them with the corresponding public key registered during
-bootstrap.
+self-service provisioning.
 
 ## Topics
 

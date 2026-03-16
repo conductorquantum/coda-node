@@ -33,7 +33,7 @@ class VPNError(CodaError):
 
 
 class SelfServiceError(VPNError):
-    """Self-service bootstrap or reconnect failure."""
+    """Self-service provisioning or reconnect failure."""
 
 
 class ExecutorError(CodaError):

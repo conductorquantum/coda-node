@@ -6,7 +6,7 @@ Comprehensive documentation for the Coda self-service node runtime.
 
 | Area | Description | Directory |
 |---|---|---|
-| [Bootstrap & Reconnect](bootstrap/INDEX.md) | Self-service provisioning, connect protocol, token lifecycle, credential persistence. | `docs/bootstrap/` |
+| [Self-Service & Reconnect](self-service/INDEX.md) | Self-service provisioning, connect protocol, token lifecycle, credential persistence. | `docs/self-service/` |
 | [VPN Management](vpn/INDEX.md) | OpenVPN tunnel lifecycle, health monitoring, cloud VPN infrastructure. | `docs/vpn/` |
 | [Job Execution](jobs/INDEX.md) | Redis Streams consumer, NativeGateIR schema, custom execution backends. | `docs/jobs/` |
 | [Webhooks](webhooks/INDEX.md) | Authenticated result delivery, retry logic, payload format. | `docs/webhooks/` |
@@ -21,7 +21,7 @@ Comprehensive documentation for the Coda self-service node runtime.
 │                        Coda Cloud                           │
 │  ┌──────────────┐  ┌──────────────┐  ┌──────────────────┐  │
 │  │ /qpu/connect │  │ /qpu/webhook │  │ Redis Streams    │  │
-│  │  (bootstrap) │  │  (results)   │  │  qpu:{id}:jobs   │  │
+│  │ (self-svc)   │  │  (results)   │  │  qpu:{id}:jobs   │  │
 │  └──────┬───────┘  └──────▲───────┘  └────────┬─────────┘  │
 │         │                 │                    │            │
 │         │    AWS Client VPN (mTLS)             │            │
@@ -36,8 +36,8 @@ Comprehensive documentation for the Coda self-service node runtime.
     │  └──────┬───────┘  └──────┬───────┘  └────────────┘  │
     │         │                 │                           │
     │  ┌──────▼───────┐  ┌─────▼────────┐                  │
-    │  │ Bootstrapper │  │ /health      │                  │
-    │  │ (service.py) │  │ /ready       │                  │
+│  │ Provisioner  │  │ /health      │                  │
+│  │ (service.py) │  │ /ready       │                  │
     │  └──────────────┘  └──────────────┘                  │
     │                                                      │
     │  ┌──────────────┐  ┌──────────────┐  ┌────────────┐  │

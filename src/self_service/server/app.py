@@ -42,7 +42,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
     The returned app uses an async lifespan that:
 
     1. Loads ``Settings`` from environment / persisted config.
-    2. Connects to the Coda cloud (bootstrap or JWT reconnect).
+    2. Connects to the Coda cloud (self-service or JWT reconnect).
     3. Runs a VPN preflight check and starts background monitoring.
     4. Opens a Redis consumer loop that dispatches jobs to *executor*.
     5. On shutdown, drains in-flight work and tears down resources.

@@ -4,7 +4,7 @@ Provides the ``coda`` (and ``coda-self-service``) entry points with
 subcommands:
 
 * ``start`` -- launch the FastAPI server with optional ``--token`` for
-  first-time bootstrap.
+  first-time self-service provisioning.
 * ``doctor`` -- print diagnostic information about the local
   environment (OpenVPN, VPN interface, Redis, executor).
 * ``reset`` -- wipe persisted credentials, VPN profiles, and stop any
@@ -111,7 +111,7 @@ def _print_status(label: str, value: str) -> None:
 
 
 def _start_mode(token: str) -> str:
-    """Return the display name for the bootstrap mode."""
+    """Return the display name for the startup mode."""
     return "token" if token else "env"
 
 
