@@ -3,12 +3,17 @@
 from __future__ import annotations
 
 import os
+import sys
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from self_service.server import daemon
+
+pytestmark = pytest.mark.skipif(
+    sys.platform == "win32", reason="Daemon tests hang on Windows CI"
+)
 
 
 def test_read_daemon_pid_returns_none_when_no_file(tmp_path: Path) -> None:
