@@ -21,7 +21,7 @@ import importlib
 import inspect
 import logging
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast, runtime_checkable
 
 from self_service.errors import ExecutorError
 from self_service.server.ir import NativeGateIR
@@ -51,6 +51,7 @@ class ExecutionResult:
     shots_completed: int
 
 
+@runtime_checkable
 class JobExecutor(Protocol):
     """Protocol that all execution backends must satisfy.
 
