@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import datetime, timezone
 
 from self_service.server.ir import GateOp, IRMetadata, NativeGate, NativeGateIR
 
@@ -75,13 +76,15 @@ def openqasm_to_ir(
 
     for raw in qasm.strip().splitlines():
         line = raw.strip()
-        if not line or _HEADER_RE.match(line) or _INCLUDE_RE.match(line):
+        if not line or line.startswith("//") or _HEADER_RE.match(line) or _INCLUDE_RE.match(line):
             continue
         if _BIT_DECL_RE.match(line):
             continue
 
         m_q = _QUBIT_DECL_RE.match(line)
         if m_q:
+            if num_qubits is not None:
+                raise QASMConversionError("Multiple qubit register declarations are not supported")
             num_qubits = int(m_q.group(1))
             continue
 
@@ -110,16 +113,19 @@ def openqasm_to_ir(
     if metadata is None:
         metadata = IRMetadata(
             source_hash="sha256:from-qasm",
-            compiled_at="2026-01-01T00:00:00Z",
+            compiled_at=datetime.now(timezone.utc).isoformat(),
         )
 
-    return NativeGateIR(
-        target=target,
-        num_qubits=num_qubits,
-        gates=gates,
-        measurements=measurements,
-        metadata=metadata,
-    )
+    try:
+        return NativeGateIR(
+            target=target,
+            num_qubits=num_qubits,
+            gates=gates,
+            measurements=measurements,
+            metadata=metadata,
+        )
+    except Exception as exc:
+        raise QASMConversionError(str(exc)) from exc
 
 
 # ---------------------------------------------------------------------------
