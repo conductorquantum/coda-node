@@ -89,9 +89,7 @@ class TestCZQASMRoundTrip:
             metadata=_metadata(),
         )
         qasm = ir_to_openqasm(ir)
-        ir2 = openqasm_to_ir(
-            qasm, target="superconducting_cz", metadata=ir.metadata
-        )
+        ir2 = openqasm_to_ir(qasm, target="superconducting_cz", metadata=ir.metadata)
         assert ir.gates == ir2.gates
         assert ir.measurements == ir2.measurements
         assert ir.num_qubits == ir2.num_qubits
@@ -173,9 +171,7 @@ class TestCNOTQASMRoundTrip:
             metadata=_metadata(),
         )
         qasm = ir_to_openqasm(ir)
-        ir2 = openqasm_to_ir(
-            qasm, target="superconducting_cnot", metadata=ir.metadata
-        )
+        ir2 = openqasm_to_ir(qasm, target="superconducting_cnot", metadata=ir.metadata)
         assert ir.gates == ir2.gates
         assert ir.measurements == ir2.measurements
 
@@ -216,9 +212,7 @@ class TestComplexCircuitRoundTrip:
             metadata=_metadata(),
         )
         qasm = ir_to_openqasm(ir)
-        ir2 = openqasm_to_ir(
-            qasm, target="superconducting_cz", metadata=ir.metadata
-        )
+        ir2 = openqasm_to_ir(qasm, target="superconducting_cz", metadata=ir.metadata)
         assert len(ir.gates) == len(ir2.gates)
         for g1, g2 in zip(ir.gates, ir2.gates, strict=True):
             assert g1.gate == g2.gate
@@ -234,22 +228,12 @@ class TestComplexCircuitRoundTrip:
 
 class TestQASMConversionErrors:
     def test_unsupported_gate_raises(self) -> None:
-        qasm = (
-            "OPENQASM 3.0;\n"
-            'include "stdgates.inc";\n'
-            "qubit[2] q;\n"
-            "h q[0];\n"
-        )
+        qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nh q[0];\n'
         with pytest.raises(QASMConversionError, match="not supported"):
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_bad_ry_angle_for_cnot_raises(self) -> None:
-        qasm = (
-            "OPENQASM 3.0;\n"
-            'include "stdgates.inc";\n'
-            "qubit[2] q;\n"
-            "ry(0.5) q[0];\n"
-        )
+        qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nry(0.5) q[0];\n'
         with pytest.raises(QASMConversionError, match="not representable"):
             openqasm_to_ir(qasm, target="superconducting_cnot")
 
@@ -259,12 +243,7 @@ class TestQASMConversionErrors:
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_unsupported_target_raises(self) -> None:
-        qasm = (
-            "OPENQASM 3.0;\n"
-            'include "stdgates.inc";\n'
-            "qubit[2] q;\n"
-            "rx(0.5) q[0];\n"
-        )
+        qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nrx(0.5) q[0];\n'
         with pytest.raises(QASMConversionError, match="Unsupported target"):
             openqasm_to_ir(qasm, target="trapped_ion")
 
@@ -279,8 +258,6 @@ class TestQASMConversionErrors:
         )
         qasm = ir_to_openqasm(ir)
         assert "id q[0];" in qasm
-        ir2 = openqasm_to_ir(
-            qasm, target="superconducting_cz", metadata=ir.metadata
-        )
+        ir2 = openqasm_to_ir(qasm, target="superconducting_cz", metadata=ir.metadata)
         assert ir2.gates[0].gate == NativeGate.ID
         assert ir2.gates[0].params == [0.0]

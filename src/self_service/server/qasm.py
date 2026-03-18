@@ -165,9 +165,7 @@ def _qasm_gate_to_ir(
     raise QASMConversionError(f"Unsupported target: {target}")
 
 
-def _qasm_gate_to_ir_cz(
-    name: str, params: list[float], qubits: list[int]
-) -> GateOp:
+def _qasm_gate_to_ir_cz(name: str, params: list[float], qubits: list[int]) -> GateOp:
     _map: dict[str, tuple[NativeGate, bool]] = {
         "rx": (NativeGate.RX, True),
         "ry": (NativeGate.RY, True),
@@ -176,20 +174,14 @@ def _qasm_gate_to_ir_cz(
         "id": (NativeGate.ID, False),
     }
     if name not in _map:
-        raise QASMConversionError(
-            f"Gate '{name}' not supported for superconducting_cz"
-        )
+        raise QASMConversionError(f"Gate '{name}' not supported for superconducting_cz")
     ir_gate, has_params = _map[name]
     if ir_gate == NativeGate.ID:
         return GateOp(gate=ir_gate, qubits=qubits, params=[0.0])
-    return GateOp(
-        gate=ir_gate, qubits=qubits, params=params if has_params else []
-    )
+    return GateOp(gate=ir_gate, qubits=qubits, params=params if has_params else [])
 
 
-def _qasm_gate_to_ir_cnot(
-    name: str, params: list[float], qubits: list[int]
-) -> GateOp:
+def _qasm_gate_to_ir_cnot(name: str, params: list[float], qubits: list[int]) -> GateOp:
     _simple: dict[str, tuple[NativeGate, bool]] = {
         "sx": (NativeGate.X90, False),
         "rz": (NativeGate.VIRTUAL_Z, True),
@@ -200,23 +192,17 @@ def _qasm_gate_to_ir_cnot(
         ir_gate, has_params = _simple[name]
         if ir_gate == NativeGate.ID:
             return GateOp(gate=ir_gate, qubits=qubits, params=[0.0])
-        return GateOp(
-            gate=ir_gate, qubits=qubits, params=params if has_params else []
-        )
+        return GateOp(gate=ir_gate, qubits=qubits, params=params if has_params else [])
 
     if name == "ry" and len(params) == 1:
         if math.isclose(params[0], -_HP, rel_tol=1e-12, abs_tol=1e-12):
-            return GateOp(
-                gate=NativeGate.Y_MINUS_90, qubits=qubits, params=[]
-            )
+            return GateOp(gate=NativeGate.Y_MINUS_90, qubits=qubits, params=[])
         raise QASMConversionError(
             f"ry({params[0]}) not representable in superconducting_cnot "
             f"(only ry(-π/2) maps to y_minus_90)"
         )
 
-    raise QASMConversionError(
-        f"Gate '{name}' not supported for superconducting_cnot"
-    )
+    raise QASMConversionError(f"Gate '{name}' not supported for superconducting_cnot")
 
 
 def _ir_gate_to_qasm(op: GateOp, target: str) -> str:
@@ -230,9 +216,7 @@ def _ir_gate_to_qasm(op: GateOp, target: str) -> str:
     raise QASMConversionError(f"Unsupported target: {target}")
 
 
-def _ir_gate_to_qasm_cz(
-    name: str, params: list[float], qubits_str: str
-) -> str:
+def _ir_gate_to_qasm_cz(name: str, params: list[float], qubits_str: str) -> str:
     _parameterized = {"rx", "ry", "rz"}
     _parameterless = {"cz", "id"}
     if name in _parameterized:
@@ -245,9 +229,7 @@ def _ir_gate_to_qasm_cz(
     )
 
 
-def _ir_gate_to_qasm_cnot(
-    name: str, params: list[float], qubits_str: str
-) -> str:
+def _ir_gate_to_qasm_cnot(name: str, params: list[float], qubits_str: str) -> str:
     if name == "x90":
         return f"sx {qubits_str};"
     if name == "y_minus_90":
