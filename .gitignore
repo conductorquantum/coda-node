@@ -8,4 +8,5 @@ htmlcov/
 __pycache__/
 build/
 dist/
+.DS_Store
 .e2e-credentials.json
