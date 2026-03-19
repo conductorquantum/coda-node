@@ -337,6 +337,8 @@ def _ir_gate_to_openqasm_cz(name: str, params: list[float], qubits_str: str) -> 
     _parameterized = {"rx", "ry", "rz"}
     _parameterless = {"cz", "id"}
     if name in _parameterized:
+        ps = ", ".join(_format_float(p) for p in params)
+        return f"{name}({ps}) {qubits_str};"
     if name == "virtual_z":
         if not params:
             raise QASMConversionError(
