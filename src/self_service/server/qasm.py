@@ -1,11 +1,17 @@
-"""OpenQASM 3.0 ↔ NativeGateIR round-trip conversion.
+"""OpenQASM 3.0 <-> NativeGateIR round-trip helpers.
+
+These helpers support a deliberately small OpenQASM subset so tests can
+round-trip circuits through text and keep validating that ``NativeGateIR``
+remains a valid, stable IR representation going forward. They are not meant
+to define a broader OpenQASM compatibility surface.
 
 Supports the ``superconducting_cz`` and ``superconducting_cnot`` IR targets.
 Only the QASM subset needed by these targets is handled; symbolic parameter
-expressions (e.g. ``pi/2``) are not supported — use numeric literals.
+expressions (for example ``pi/2``) are not supported, so callers must use
+numeric literals.
 
 Known limitation: the ``id`` gate carries a duration parameter in the IR
-(nanoseconds) that has no OpenQASM counterpart.  ``ir_to_openqasm`` drops
+(nanoseconds) that has no OpenQASM counterpart. ``ir_to_openqasm`` drops
 the duration, and ``openqasm_to_ir`` fills it with ``0.0``.
 """
 
@@ -13,7 +19,7 @@ from __future__ import annotations
 
 import math
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from self_service.server.ir import GateOp, IRMetadata, NativeGate, NativeGateIR
 
@@ -44,7 +50,14 @@ _QUBIT_REF_RE = re.compile(r"\w+\[(\d+)]")
 
 
 def _format_float(value: float) -> str:
-    """Format with enough precision for lossless round-trip."""
+    """Format a numeric parameter for stable QASM output.
+
+    Args:
+        value: Numeric value to serialize.
+
+    Returns:
+        String form with enough precision for round-trip comparisons.
+    """
     return f"{value:.15g}"
 
 
@@ -59,16 +72,24 @@ def openqasm_to_ir(
     target: str,
     metadata: IRMetadata | None = None,
 ) -> NativeGateIR:
-    """Parse a minimal OpenQASM 3.0 program into a ``NativeGateIR``.
+    """Parse supported OpenQASM text into ``NativeGateIR``.
 
-    Parameters
-    ----------
-    qasm:
-        OpenQASM 3.0 source text.
-    target:
-        IR target, e.g. ``"superconducting_cz"`` or ``"superconducting_cnot"``.
-    metadata:
-        Optional provenance metadata; a default is used if omitted.
+    This parser exists primarily to support round-trip validation of the IR.
+    It accepts only the subset of OpenQASM needed to confirm that the current
+    ``NativeGateIR`` encoding can be serialized and reconstructed reliably.
+
+    Args:
+        qasm: OpenQASM 3.0 source text.
+        target: Native gate target to validate against.
+        metadata: Optional metadata to attach to the returned IR. When omitted,
+            placeholder metadata is generated.
+
+    Returns:
+        Parsed native-gate IR object.
+
+    Raises:
+        QASMConversionError: If the QASM text uses unsupported syntax, gates,
+            or targets, or if the resulting IR fails validation.
     """
     num_qubits: int | None = None
     gates: list[GateOp] = []
@@ -113,7 +134,7 @@ def openqasm_to_ir(
     if metadata is None:
         metadata = IRMetadata(
             source_hash="sha256:from-qasm",
-            compiled_at=datetime.now(timezone.utc).isoformat(),
+            compiled_at=datetime.now(UTC).isoformat(),
         )
 
     try:
@@ -134,10 +155,22 @@ def openqasm_to_ir(
 
 
 def ir_to_openqasm(ir: NativeGateIR) -> str:
-    """Serialize a ``NativeGateIR`` to an OpenQASM 3.0 string.
+    """Serialize ``NativeGateIR`` into the supported OpenQASM subset.
 
-    The output only uses the gate subset understood by :func:`openqasm_to_ir`,
-    ensuring a lossless round-trip (except for ``id`` gate durations).
+    The output is intentionally limited to the subset understood by
+    :func:`openqasm_to_ir` so tests can round-trip circuits through QASM and
+    keep treating ``NativeGateIR`` as the durable representation. The only
+    known lossy case is the ``id`` gate duration.
+
+    Args:
+        ir: Native-gate IR to serialize.
+
+    Returns:
+        OpenQASM 3.0 source text.
+
+    Raises:
+        QASMConversionError: If the IR contains a gate that has no supported
+            mapping for the selected target.
     """
     lines: list[str] = [
         "OPENQASM 3.0;",
@@ -164,6 +197,20 @@ def ir_to_openqasm(ir: NativeGateIR) -> str:
 def _qasm_gate_to_ir(
     name: str, params: list[float], qubits: list[int], target: str
 ) -> GateOp:
+    """Map a parsed QASM gate into a target-specific IR operation.
+
+    Args:
+        name: Parsed QASM gate name.
+        params: Parsed numeric gate parameters.
+        qubits: Parsed qubit indices referenced by the gate.
+        target: Native gate target that determines the mapping rules.
+
+    Returns:
+        Corresponding native-gate operation.
+
+    Raises:
+        QASMConversionError: If the target is unsupported.
+    """
     if target == "superconducting_cz":
         return _qasm_gate_to_ir_cz(name, params, qubits)
     if target == "superconducting_cnot":
@@ -172,6 +219,19 @@ def _qasm_gate_to_ir(
 
 
 def _qasm_gate_to_ir_cz(name: str, params: list[float], qubits: list[int]) -> GateOp:
+    """Map a QASM gate into the ``superconducting_cz`` gate set.
+
+    Args:
+        name: Parsed QASM gate name.
+        params: Parsed numeric gate parameters.
+        qubits: Parsed qubit indices referenced by the gate.
+
+    Returns:
+        Corresponding native-gate operation.
+
+    Raises:
+        QASMConversionError: If the gate is not representable for this target.
+    """
     _map: dict[str, tuple[NativeGate, bool]] = {
         "rx": (NativeGate.RX, True),
         "ry": (NativeGate.RY, True),
@@ -188,6 +248,19 @@ def _qasm_gate_to_ir_cz(name: str, params: list[float], qubits: list[int]) -> Ga
 
 
 def _qasm_gate_to_ir_cnot(name: str, params: list[float], qubits: list[int]) -> GateOp:
+    """Map a QASM gate into the ``superconducting_cnot`` gate set.
+
+    Args:
+        name: Parsed QASM gate name.
+        params: Parsed numeric gate parameters.
+        qubits: Parsed qubit indices referenced by the gate.
+
+    Returns:
+        Corresponding native-gate operation.
+
+    Raises:
+        QASMConversionError: If the gate is not representable for this target.
+    """
     _simple: dict[str, tuple[NativeGate, bool]] = {
         "sx": (NativeGate.X90, False),
         "rz": (NativeGate.VIRTUAL_Z, True),
@@ -212,6 +285,18 @@ def _qasm_gate_to_ir_cnot(name: str, params: list[float], qubits: list[int]) -> 
 
 
 def _ir_gate_to_qasm(op: GateOp, target: str) -> str:
+    """Map an IR operation into target-specific QASM text.
+
+    Args:
+        op: IR gate operation to serialize.
+        target: Native gate target that determines the mapping rules.
+
+    Returns:
+        Single OpenQASM instruction line.
+
+    Raises:
+        QASMConversionError: If the target is unsupported.
+    """
     name = op.gate.value
     qubits_str = ", ".join(f"q[{q}]" for q in op.qubits)
 
@@ -223,6 +308,19 @@ def _ir_gate_to_qasm(op: GateOp, target: str) -> str:
 
 
 def _ir_gate_to_qasm_cz(name: str, params: list[float], qubits_str: str) -> str:
+    """Serialize a ``superconducting_cz`` IR gate into QASM text.
+
+    Args:
+        name: Native gate name.
+        params: Gate parameters to emit.
+        qubits_str: Preformatted QASM qubit operand list.
+
+    Returns:
+        Single OpenQASM instruction line.
+
+    Raises:
+        QASMConversionError: If the gate has no supported QASM mapping.
+    """
     _parameterized = {"rx", "ry", "rz"}
     _parameterless = {"cz", "id"}
     if name in _parameterized:
@@ -236,6 +334,19 @@ def _ir_gate_to_qasm_cz(name: str, params: list[float], qubits_str: str) -> str:
 
 
 def _ir_gate_to_qasm_cnot(name: str, params: list[float], qubits_str: str) -> str:
+    """Serialize a ``superconducting_cnot`` IR gate into QASM text.
+
+    Args:
+        name: Native gate name.
+        params: Gate parameters to emit.
+        qubits_str: Preformatted QASM qubit operand list.
+
+    Returns:
+        Single OpenQASM instruction line.
+
+    Raises:
+        QASMConversionError: If the gate has no supported QASM mapping.
+    """
     if name == "x90":
         return f"sx {qubits_str};"
     if name == "y_minus_90":

@@ -1,4 +1,9 @@
-"""Tests for OpenQASM 3.0 ↔ NativeGateIR round-trip conversion."""
+"""Tests for OpenQASM 3.0 <-> NativeGateIR round-trip conversion.
+
+The QASM round-trip exists as a test harness for ``NativeGateIR``. These tests
+verify that the IR can be serialized and reconstructed consistently so it
+remains a valid representation going forward.
+"""
 
 from __future__ import annotations
 
@@ -15,6 +20,11 @@ from self_service.server.qasm import (
 
 
 def _metadata() -> IRMetadata:
+    """Build deterministic metadata for round-trip assertions.
+
+    Returns:
+        Stable metadata object shared across tests.
+    """
     return IRMetadata(
         source_hash="sha256:qasm-test", compiled_at="2026-03-17T00:00:00Z"
     )
@@ -26,9 +36,10 @@ def _metadata() -> IRMetadata:
 
 
 class TestCZQASMRoundTrip:
-    """Round-trip tests for the superconducting_cz target."""
+    """Round-trip coverage for the ``superconducting_cz`` target."""
 
     def test_full_circuit(self) -> None:
+        """Preserve a full CZ-target circuit through QASM round-trip."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -51,6 +62,7 @@ class TestCZQASMRoundTrip:
         assert ir.num_qubits == ir2.num_qubits
 
     def test_single_gate_roundtrips(self) -> None:
+        """Round-trip each supported CZ-target gate independently."""
         for gate_line, expected_gate in [
             ("rx(0.123) q[0];", "rx"),
             ("ry(-0.456) q[1];", "ry"),
@@ -76,6 +88,7 @@ class TestCZQASMRoundTrip:
             assert ir.gates == ir2.gates
 
     def test_ir_roundtrip(self) -> None:
+        """Rebuild the original CZ-target IR from serialized QASM."""
         ir = NativeGateIR(
             target="superconducting_cz",
             num_qubits=3,
@@ -95,7 +108,7 @@ class TestCZQASMRoundTrip:
         assert ir.num_qubits == ir2.num_qubits
 
     def test_text_stability(self) -> None:
-        """QASM → IR → QASM produces byte-identical output."""
+        """Keep stable input QASM byte-identical after round-trip."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -115,9 +128,10 @@ class TestCZQASMRoundTrip:
 
 
 class TestCNOTQASMRoundTrip:
-    """Round-trip tests for the superconducting_cnot target."""
+    """Round-trip coverage for the ``superconducting_cnot`` target."""
 
     def test_full_circuit(self) -> None:
+        """Preserve a full CNOT-target circuit through QASM round-trip."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -139,6 +153,7 @@ class TestCNOTQASMRoundTrip:
         assert ir.measurements == ir2.measurements
 
     def test_gate_mapping(self) -> None:
+        """Map each supported CNOT-target QASM gate into the expected IR."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -158,6 +173,7 @@ class TestCNOTQASMRoundTrip:
         assert ir.gates[3].gate == NativeGate.CNOT
 
     def test_ir_roundtrip(self) -> None:
+        """Rebuild the original CNOT-target IR from serialized QASM."""
         ir = NativeGateIR(
             target="superconducting_cnot",
             num_qubits=4,
@@ -176,6 +192,7 @@ class TestCNOTQASMRoundTrip:
         assert ir.measurements == ir2.measurements
 
     def test_text_stability(self) -> None:
+        """Keep stable CNOT-target QASM byte-identical after round-trip."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -195,7 +212,10 @@ class TestCNOTQASMRoundTrip:
 
 
 class TestComplexCircuitRoundTrip:
+    """Coverage for larger circuits that stress parameter preservation."""
+
     def test_multi_gate_circuit_preserves_params(self) -> None:
+        """Preserve gate ordering, operands, and parameters across round-trip."""
         ir = NativeGateIR(
             target="superconducting_cz",
             num_qubits=5,
@@ -227,27 +247,34 @@ class TestComplexCircuitRoundTrip:
 
 
 class TestQASMConversionErrors:
+    """Error handling coverage for unsupported or invalid QASM."""
+
     def test_unsupported_gate_raises(self) -> None:
+        """Reject gates that are outside the supported subset."""
         qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nh q[0];\n'
         with pytest.raises(QASMConversionError, match="not supported"):
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_bad_ry_angle_for_cnot_raises(self) -> None:
+        """Reject CNOT-target ``ry`` angles that have no IR mapping."""
         qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nry(0.5) q[0];\n'
         with pytest.raises(QASMConversionError, match="not representable"):
             openqasm_to_ir(qasm, target="superconducting_cnot")
 
     def test_missing_qubit_register_raises(self) -> None:
+        """Require an explicit qubit register declaration."""
         qasm = "OPENQASM 3.0;\nrx(0.5) q[0];\n"
         with pytest.raises(QASMConversionError, match="No qubit register"):
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_unsupported_target_raises(self) -> None:
+        """Reject targets that the round-trip helper does not support."""
         qasm = 'OPENQASM 3.0;\ninclude "stdgates.inc";\nqubit[2] q;\nrx(0.5) q[0];\n'
         with pytest.raises(QASMConversionError, match="Unsupported target"):
             openqasm_to_ir(qasm, target="trapped_ion")
 
     def test_comment_lines_are_skipped(self) -> None:
+        """Ignore comment lines while parsing supported QASM."""
         qasm = (
             "OPENQASM 3.0;\n"
             '// generated by compiler v2\n'
@@ -262,6 +289,7 @@ class TestQASMConversionErrors:
         assert ir.gates[0].gate == NativeGate.RX
 
     def test_multiple_qubit_registers_raises(self) -> None:
+        """Reject programs that declare more than one qubit register."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -273,6 +301,7 @@ class TestQASMConversionErrors:
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_out_of_range_qubit_raises_conversion_error(self) -> None:
+        """Surface IR validation errors for invalid qubit indices."""
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -283,9 +312,10 @@ class TestQASMConversionErrors:
             openqasm_to_ir(qasm, target="superconducting_cz")
 
     def test_default_metadata_uses_current_time(self) -> None:
-        from datetime import datetime, timezone
+        """Generate placeholder metadata when callers do not supply any."""
+        from datetime import UTC, datetime
 
-        before = datetime.now(timezone.utc)
+        before = datetime.now(UTC)
         qasm = (
             "OPENQASM 3.0;\n"
             'include "stdgates.inc";\n'
@@ -293,12 +323,12 @@ class TestQASMConversionErrors:
             "rx(0.5) q[0];\n"
         )
         ir = openqasm_to_ir(qasm, target="superconducting_cz")
-        after = datetime.now(timezone.utc)
+        after = datetime.now(UTC)
         compiled = datetime.fromisoformat(ir.metadata.compiled_at)
         assert before <= compiled <= after
 
     def test_id_gate_roundtrip_lossy(self) -> None:
-        """id duration is lost through QASM; round-trip yields 0.0."""
+        """Document that ``id`` duration is intentionally lost through QASM."""
         ir = NativeGateIR(
             target="superconducting_cz",
             num_qubits=1,

@@ -38,6 +38,7 @@ import hashlib
 import os
 import secrets
 from base64 import urlsafe_b64encode
+from collections.abc import AsyncIterator
 from typing import Any, cast
 
 import httpx
@@ -61,6 +62,14 @@ _PREFIX = "CODA_SMOKETEST"
 
 
 def _require_env(name: str) -> str:
+    """Return a required environment variable or skip the suite.
+
+    Args:
+        name: Environment variable name to read.
+
+    Returns:
+        Trimmed environment variable value.
+    """
     value = os.environ.get(name, "").strip()
     if not value:
         pytest.skip(f"{name} is not set")
@@ -72,7 +81,10 @@ def _connect_headers() -> dict[str, str]:
 
     When ``CODA_SMOKETEST_VERCEL_BYPASS`` is set, include the
     ``x-vercel-protection-bypass`` header so requests pass through
-    Vercel's deployment protection (staging only).
+    Vercel's deployment protection in staging.
+
+    Returns:
+        Extra headers to send with connect requests.
     """
     bypass = os.environ.get(f"{_PREFIX}_VERCEL_BYPASS", "").strip()
     if bypass:
@@ -81,7 +93,11 @@ def _connect_headers() -> dict[str, str]:
 
 
 def _generate_bootstrap_token() -> tuple[str, str, str]:
-    """Return ``(raw_token, token_hash, token_prefix)``."""
+    """Generate a disposable bootstrap token payload.
+
+    Returns:
+        Tuple of raw token, token hash, and token prefix.
+    """
     raw = f"cqb_{urlsafe_b64encode(secrets.token_bytes(32)).decode().rstrip('=')}"
     token_hash = hashlib.sha256(raw.encode()).hexdigest()
     prefix = raw[:16]
@@ -92,7 +108,18 @@ _TEST_USER_EMAIL = "test-admin@conductorquantum.com"
 
 
 async def _get_test_user_id(supabase_url: str, supabase_key: str) -> str:
-    """Return the UUID of the dedicated smoketest user."""
+    """Look up the dedicated smoketest user in Supabase.
+
+    Args:
+        supabase_url: Supabase project base URL.
+        supabase_key: Supabase service-role key.
+
+    Returns:
+        UUID for the dedicated smoketest user.
+
+    Raises:
+        AssertionError: If the smoketest user cannot be found.
+    """
     async with httpx.AsyncClient() as client:
         resp = await client.get(
             f"{supabase_url}/auth/v1/admin/users",
@@ -117,7 +144,16 @@ async def _create_bootstrap_token(
     supabase_key: str,
     qpu_id: str,
 ) -> tuple[str, str]:
-    """Insert a bootstrap token via Supabase REST and return ``(raw_token, row_id)``."""
+    """Create a disposable bootstrap token for the target QPU.
+
+    Args:
+        supabase_url: Supabase project base URL.
+        supabase_key: Supabase service-role key.
+        qpu_id: QPU identifier that should own the token.
+
+    Returns:
+        Tuple of raw token and created row ID.
+    """
     raw_token, token_hash, token_prefix = _generate_bootstrap_token()
     owner_id = await _get_test_user_id(supabase_url, supabase_key)
 
@@ -156,7 +192,13 @@ async def _revoke_bootstrap_token(
     supabase_key: str,
     token_id: str,
 ) -> None:
-    """Mark the smoketest token as revoked so it cannot be reused."""
+    """Revoke a disposable bootstrap token after the test run.
+
+    Args:
+        supabase_url: Supabase project base URL.
+        supabase_key: Supabase service-role key.
+        token_id: Token row ID to revoke.
+    """
     async with httpx.AsyncClient() as client:
         await client.patch(
             f"{supabase_url}/rest/v1/qpu_bootstrap_tokens",
@@ -175,9 +217,14 @@ async def _revoke_bootstrap_token(
 # ---------------------------------------------------------------------------
 
 
-@pytest_asyncio.fixture(scope="module")
-async def smoketest_ctx() -> dict[str, Any]:
-    """Provision a bootstrap token, run both connect flows, yield context."""
+@pytest_asyncio.fixture(scope="module", name="smoketest_ctx")
+async def _smoketest_ctx() -> dict[str, Any]:
+    """Build shared context for bootstrap and reconnect smoketests.
+
+    Returns:
+        Dictionary containing target environment details plus bootstrap and
+        reconnect bundles.
+    """
     target_url = _require_env(f"{_PREFIX}_URL")
     supabase_url = _require_env(f"{_PREFIX}_SUPABASE_URL")
     supabase_key = _require_env(f"{_PREFIX}_SUPABASE_KEY")
@@ -199,7 +246,6 @@ async def smoketest_ctx() -> dict[str, Any]:
 
     try:
         bootstrap_bundle = await fetch_self_service_bundle(bootstrap_settings)
-        bootstrap_bundle = cast(dict[str, Any], bootstrap_bundle)
     except Exception:
         await _revoke_bootstrap_token(supabase_url, supabase_key, token_id)
         raise
@@ -215,7 +261,6 @@ async def smoketest_ctx() -> dict[str, Any]:
     )
 
     reconnect_bundle = await fetch_reconnect_bundle(reconnect_settings)
-    reconnect_bundle = cast(dict[str, Any], reconnect_bundle)
 
     return {
         "target_url": target_url,
@@ -229,9 +274,13 @@ async def smoketest_ctx() -> dict[str, Any]:
 
 
 @pytest.fixture(autouse=True, scope="module")
-async def _cleanup(smoketest_ctx: dict[str, Any]) -> None:  # type: ignore[misc]
-    """Revoke the disposable bootstrap token after all tests finish."""
-    yield  # type: ignore[misc]
+async def _cleanup(smoketest_ctx: dict[str, Any]) -> AsyncIterator[None]:
+    """Clean up the disposable bootstrap token after the module finishes.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with token metadata.
+    """
+    yield
     await _revoke_bootstrap_token(
         smoketest_ctx["supabase_url"],
         smoketest_ctx["supabase_key"],
@@ -245,6 +294,11 @@ async def _cleanup(smoketest_ctx: dict[str, Any]) -> None:  # type: ignore[misc]
 
 
 def _assert_bundle_structure(bundle: dict[str, Any]) -> None:
+    """Validate the common fields expected in connect bundles.
+
+    Args:
+        bundle: Bundle returned by the connect endpoint.
+    """
     assert isinstance(bundle.get("qpu_id"), str) and bundle["qpu_id"]
     assert isinstance(bundle.get("qpu_display_name"), str)
     assert isinstance(bundle.get("jwt_key_id"), str) and bundle["jwt_key_id"]
@@ -253,6 +307,11 @@ def _assert_bundle_structure(bundle: dict[str, Any]) -> None:
 
 
 def _assert_paths(bundle: dict[str, Any]) -> None:
+    """Validate the expected API path values in a connect bundle.
+
+    Args:
+        bundle: Bundle returned by the connect endpoint.
+    """
     assert bundle["connect_path"] == "/api/internal/qpu/connect"
     assert bundle["register_path"] == "/api/internal/qpu/register"
     assert bundle["heartbeat_path"] == "/api/internal/qpu/heartbeat"
@@ -260,6 +319,11 @@ def _assert_paths(bundle: dict[str, Any]) -> None:
 
 
 def _assert_vpn(bundle: dict[str, Any]) -> None:
+    """Validate the VPN section of a connect bundle.
+
+    Args:
+        bundle: Bundle returned by the connect endpoint.
+    """
     vpn = bundle.get("vpn")
     assert isinstance(vpn, dict)
     assert isinstance(vpn.get("required"), bool)
@@ -275,6 +339,11 @@ def _assert_vpn(bundle: dict[str, Any]) -> None:
 async def test_bootstrap_returns_valid_bundle(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify bootstrap connect returns a structurally valid bundle.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with bootstrap results.
+    """
     bundle = smoketest_ctx["bootstrap_bundle"]
     _assert_bundle_structure(bundle)
     _assert_paths(bundle)
@@ -288,6 +357,11 @@ async def test_bootstrap_returns_valid_bundle(
 async def test_bootstrap_issues_jwt_credentials(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify bootstrap connect issues JWT credentials.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with bootstrap results.
+    """
     bundle = smoketest_ctx["bootstrap_bundle"]
     assert isinstance(bundle.get("jwt_private_key"), str)
     assert bundle["jwt_private_key"].startswith("-----BEGIN")
@@ -298,6 +372,11 @@ async def test_bootstrap_issues_jwt_credentials(
 async def test_bootstrap_targets_correct_qpu(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify bootstrap connect provisions the requested QPU.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with bootstrap results.
+    """
     assert smoketest_ctx["bootstrap_bundle"]["qpu_id"] == smoketest_ctx["qpu_id"]
 
 
@@ -310,6 +389,11 @@ async def test_bootstrap_targets_correct_qpu(
 async def test_reconnect_returns_valid_bundle(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify JWT reconnect returns a structurally valid bundle.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with reconnect results.
+    """
     bundle = smoketest_ctx["reconnect_bundle"]
     _assert_bundle_structure(bundle)
     _assert_paths(bundle)
@@ -323,6 +407,11 @@ async def test_reconnect_returns_valid_bundle(
 async def test_reconnect_omits_private_key(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify reconnect does not resend the private key.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with reconnect results.
+    """
     assert not smoketest_ctx["reconnect_bundle"].get("jwt_private_key")
 
 
@@ -330,6 +419,12 @@ async def test_reconnect_omits_private_key(
 async def test_reconnect_preserves_identity(
     smoketest_ctx: dict[str, Any],
 ) -> None:
+    """Verify reconnect keeps the same QPU and key identity.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with bootstrap and reconnect
+            results.
+    """
     bootstrap = smoketest_ctx["bootstrap_bundle"]
     reconnect = smoketest_ctx["reconnect_bundle"]
     assert reconnect["qpu_id"] == bootstrap["qpu_id"]
@@ -342,7 +437,12 @@ async def test_reconnect_preserves_identity(
 
 
 def _has_net_admin() -> bool:
-    """Return True if the process can create tun devices (i.e. has NET_ADMIN)."""
+    """Check whether the process can create TUN devices.
+
+    Returns:
+        ``True`` when the environment has the Linux capabilities needed for
+        VPN tunnel tests.
+    """
     import subprocess
 
     try:
@@ -350,12 +450,14 @@ def _has_net_admin() -> bool:
             ["ip", "tuntap", "add", "mode", "tun", "dev", "_probe0"],
             capture_output=True,
             timeout=5,
+            check=False,
         )
         if result.returncode == 0:
             subprocess.run(
                 ["ip", "tuntap", "del", "mode", "tun", "dev", "_probe0"],
                 capture_output=True,
                 timeout=5,
+                check=False,
             )
             return True
     except (FileNotFoundError, subprocess.TimeoutExpired):
@@ -363,13 +465,22 @@ def _has_net_admin() -> bool:
     return False
 
 
-@pytest_asyncio.fixture(scope="module")
-async def vpn_settings(smoketest_ctx: dict[str, Any]) -> Settings | None:
+@pytest_asyncio.fixture(scope="module", name="vpn_settings")
+async def _vpn_settings(
+    smoketest_ctx: dict[str, Any],
+) -> AsyncIterator[Settings | None]:
     """Start OpenVPN from the bootstrap bundle and yield live Settings.
 
     Yields ``None`` (and all dependent tests skip) when NET_ADMIN is
     unavailable or VPN is not required for the environment.  The daemon
     is killed after all VPN tests finish.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with bootstrap results.
+
+    Yields:
+        Live runtime settings for VPN assertions, or ``None`` when VPN tests
+        cannot run in the current environment.
     """
     if not _has_net_admin():
         yield None
@@ -407,7 +518,12 @@ async def vpn_settings(smoketest_ctx: dict[str, Any]) -> Settings | None:
 
 @pytest.mark.asyncio
 async def test_vpn_tunnel_establishes(vpn_settings: Settings | None) -> None:
-    """Verify the OpenVPN tunnel interface is up."""
+    """Verify the OpenVPN tunnel interface comes up.
+
+    Args:
+        vpn_settings: Live VPN settings fixture, or ``None`` when VPN tests
+            are unavailable.
+    """
     if vpn_settings is None:
         pytest.skip(
             "VPN tunnel not available (needs --cap-add=NET_ADMIN, native Linux Docker)"
@@ -422,7 +538,13 @@ async def test_vpn_probe_targets_reachable(
     smoketest_ctx: dict[str, Any],
     vpn_settings: Settings | None,
 ) -> None:
-    """Verify probe targets are reachable through the VPN tunnel."""
+    """Verify VPN probe targets are reachable through the tunnel.
+
+    Args:
+        smoketest_ctx: Shared smoketest context with probe target metadata.
+        vpn_settings: Live VPN settings fixture, or ``None`` when VPN tests
+            are unavailable.
+    """
     if vpn_settings is None:
         pytest.skip(
             "VPN tunnel not available (needs --cap-add=NET_ADMIN, native Linux Docker)"
