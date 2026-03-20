@@ -77,7 +77,9 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
         ):
             raise RuntimeError(f"VPN preflight failed: {vpn_status.reason}")
 
-        redis_client = aioredis.from_url(settings.redis_url)
+        redis_client = aioredis.from_url(
+            settings.redis_url, decode_responses=True
+        )
         runner = executor or load_executor(settings)
         webhook = WebhookClient(
             qpu_id=settings.qpu_id,
