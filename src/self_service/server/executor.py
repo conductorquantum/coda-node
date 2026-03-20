@@ -139,6 +139,11 @@ def _discover_executor_factories() -> list[str]:
         try:
             mod = importlib.import_module(module_name)
         except Exception:
+            logger.warning(
+                "Failed to import executor_factory module %r, skipping",
+                module_name,
+                exc_info=True,
+            )
             continue
         factory = getattr(mod, "create_executor", None)
         if factory is not None and callable(factory):
