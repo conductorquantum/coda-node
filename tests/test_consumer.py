@@ -1,9 +1,11 @@
 """Tests for the Redis stream consumer."""
 
 import asyncio
+from typing import cast
 from unittest.mock import AsyncMock
 
 import pytest
+import redis.asyncio as aioredis
 
 from self_service.server.consumer import RedisConsumer
 from self_service.server.executor import ExecutionResult
@@ -91,7 +93,7 @@ def consumer(
     mock_redis: MockRedis, mock_runner: AsyncMock, mock_webhook: AsyncMock
 ) -> RedisConsumer:
     return RedisConsumer(
-        redis=mock_redis,
+        redis=cast(aioredis.Redis, mock_redis),
         runner=mock_runner,
         webhook=mock_webhook,
         qpu_id="test-node",
@@ -198,6 +200,97 @@ class TestConsumer:
         )
         assert consumer._idle_event.is_set()
         assert consumer.current_job_id is None
+
+    def test_processes_job_with_byte_keys(
+        self,
+        consumer: RedisConsumer,
+        mock_redis: MockRedis,
+        mock_runner: AsyncMock,
+        mock_webhook: AsyncMock,
+    ) -> None:
+        """Byte-keyed messages (from non-decode_responses clients) are handled."""
+        asyncio.run(
+            consumer._process_message(
+                "msg-bytes",
+                {
+                    b"job_id": b"job-bytes",
+                    b"ir_json": VALID_IR_JSON.encode(),
+                    b"shots": b"1024",
+                    b"callback_url": b"https://example.com/callback",
+                },
+            )
+        )
+        mock_runner.run.assert_called_once()
+        mock_webhook.send_result.assert_called_once()
+        assert "msg-bytes" in mock_redis._acked
+
+    def test_malformed_message_acked_and_skipped(
+        self,
+        consumer: RedisConsumer,
+        mock_redis: MockRedis,
+        mock_runner: AsyncMock,
+    ) -> None:
+        """Messages missing required fields are ACK-ed and skipped."""
+        asyncio.run(
+            consumer._process_message(
+                "msg-bad",
+                {"ir_json": VALID_IR_JSON, "shots": "1024"},
+            )
+        )
+        mock_runner.run.assert_not_called()
+        assert "msg-bad" in mock_redis._acked
+
+
+class _MockRedisWithPending(MockRedis):
+    """MockRedis that returns a single recently-stuck pending message."""
+
+    def __init__(self, pending_fields: dict[str, str]) -> None:
+        super().__init__()
+        self._pending_fields = pending_fields
+
+    async def xpending_range(
+        self,
+        name: str,
+        groupname: str,
+        consumername: str,
+        min: str,
+        max: str,
+        count: int,
+    ) -> list[dict[str, str | int]]:
+        return [{"message_id": "msg-pending", "time_since_delivered": 500}]
+
+    async def xrange(
+        self, stream: str, min: str, max: str
+    ) -> list[tuple[str, dict[str, str]]]:
+        return [("msg-pending", self._pending_fields)]
+
+
+class TestRecoverPending:
+    def test_recovers_all_pending_regardless_of_idle_time(
+        self,
+        mock_runner: AsyncMock,
+        mock_webhook: AsyncMock,
+    ) -> None:
+        """Pending messages for this consumer are recovered even if freshly stuck."""
+        pending_fields = {
+            "job_id": "job-pending",
+            "ir_json": VALID_IR_JSON,
+            "shots": "1024",
+            "callback_url": "https://example.com/callback",
+        }
+        redis = _MockRedisWithPending(pending_fields)
+
+        consumer = RedisConsumer(
+            redis=cast(aioredis.Redis, redis),
+            runner=mock_runner,
+            webhook=mock_webhook,
+            qpu_id="test-node",
+            crash_recovery_threshold_ms=60_000,
+        )
+        recovered = asyncio.run(consumer.recover_pending())
+        assert recovered == 1
+        mock_runner.run.assert_called_once()
+        assert "msg-pending" in redis._acked
 
 
 class TestDrain:

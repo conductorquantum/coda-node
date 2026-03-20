@@ -9,15 +9,17 @@ Executor resolution order (in :func:`load_executor`):
 1. If ``CODA_EXECUTOR_FACTORY`` is set, import the dotted path and use
    it as either a pre-built executor instance (has ``.run``) or a
    factory callable.
-2. If ``CODA_DEVICE_CONFIG`` points to a YAML file, auto-detect the
-   appropriate framework and create an executor.
-3. Otherwise fall back to :class:`NoopExecutor`, which returns a
-   deterministic all-zeros bitstring for every job.
+2. Scan installed packages for the convention
+   ``<pkg>.executor_factory:create_executor``.  If exactly one match is
+   found, use it automatically.  If multiple match, warn and fall back.
+3. Fall back to :class:`NoopExecutor`, which returns a deterministic
+   all-zeros bitstring for every job.
 """
 
 from __future__ import annotations
 
 import importlib
+import importlib.util
 import inspect
 import logging
 from dataclasses import dataclass
@@ -95,53 +97,59 @@ def _load_attr(import_path: str) -> Any:
     return getattr(module, attr_name)
 
 
-def _load_from_factory(settings: Settings) -> JobExecutor:
-    """Import and instantiate the executor from ``CODA_EXECUTOR_FACTORY``."""
-    target = _load_attr(settings.executor_factory)
+def _instantiate_factory(import_path: str, settings: Settings) -> JobExecutor:
+    """Import and instantiate the executor at *import_path*."""
+    target = _load_attr(import_path)
     if hasattr(target, "run"):
         return cast(JobExecutor, target)
 
     if not callable(target):
-        raise ExecutorError(
-            f"Executor target {settings.executor_factory!r} is not callable"
-        )
+        raise ExecutorError(f"Executor target {import_path!r} is not callable")
 
     parameters = inspect.signature(target).parameters
     executor = target(settings) if parameters else target()
     if not hasattr(executor, "run"):
-        raise ExecutorError(
-            f"Executor factory {settings.executor_factory!r} did not return a runner"
-        )
+        raise ExecutorError(f"Executor factory {import_path!r} did not return a runner")
     return cast(JobExecutor, executor)
 
 
-def _load_from_device_config(settings: Settings) -> JobExecutor:
-    """Load the framework-based executor from ``CODA_DEVICE_CONFIG``."""
-    from self_service.frameworks.base import DeviceConfig
-    from self_service.frameworks.registry import default_registry
+def _discover_executor_factories() -> list[str]:
+    """Scan installed packages for the ``create_executor`` convention.
 
+    Iterates over importable top-level packages and checks whether
+    ``<pkg>.executor_factory`` exists with a callable ``create_executor``.
+    Returns a list of ``module:attr`` import paths.
+    """
     try:
-        config = DeviceConfig.from_yaml(settings.device_config)
-    except FileNotFoundError:
-        raise ExecutorError(
-            f"Device config not found: {settings.device_config}"
-        ) from None
-    except Exception as exc:
-        raise ExecutorError(
-            f"Invalid device config {settings.device_config!r}: {exc}"
-        ) from exc
+        from importlib.metadata import packages_distributions
+    except ImportError:
+        return []
 
-    registry = default_registry()
-    framework = registry.detect(config)
+    candidates: list[str] = []
+    for pkg in packages_distributions():
+        if "." in pkg or pkg.startswith("_") or pkg == "self_service":
+            continue
+        module_name = f"{pkg}.executor_factory"
+        try:
+            spec = importlib.util.find_spec(module_name)
+        except (ModuleNotFoundError, ValueError):
+            continue
+        if spec is None:
+            continue
+        try:
+            mod = importlib.import_module(module_name)
+        except Exception:
+            logger.warning(
+                "Failed to import executor_factory module %r, skipping",
+                module_name,
+                exc_info=True,
+            )
+            continue
+        factory = getattr(mod, "create_executor", None)
+        if factory is not None and callable(factory):
+            candidates.append(f"{module_name}:create_executor")
 
-    errors = framework.validate_config(config)
-    if errors:
-        raise ExecutorError(
-            f"Device config validation failed ({framework.name!r}):\n"
-            + "\n".join(f"  - {e}" for e in errors)
-        )
-
-    return framework.create_executor(config, settings)
+    return candidates
 
 
 def load_executor(settings: Settings) -> JobExecutor:
@@ -151,8 +159,9 @@ def load_executor(settings: Settings) -> JobExecutor:
 
     1. If ``settings.executor_factory`` is set, import and use it
        (pre-built executor or factory callable).
-    2. If ``settings.device_config`` points to a YAML file, auto-detect
-       the appropriate framework and create an executor.
+    2. Scan installed packages for a conventional
+       ``<pkg>.executor_factory:create_executor`` factory.  Use it if
+       exactly one match is found; warn and skip if multiple match.
     3. Fall back to :class:`NoopExecutor` with a warning.
 
     Args:
@@ -163,16 +172,25 @@ def load_executor(settings: Settings) -> JobExecutor:
 
     Raises:
         ExecutorError: If the configured executor cannot be loaded.
-        ConfigError: If the device config references an unknown framework.
     """
     if settings.executor_factory:
-        return _load_from_factory(settings)
+        return _instantiate_factory(settings.executor_factory, settings)
 
-    if settings.device_config:
-        return _load_from_device_config(settings)
+    discovered = _discover_executor_factories()
+
+    if len(discovered) == 1:
+        logger.info("Auto-discovered executor factory: %s", discovered[0])
+        return _instantiate_factory(discovered[0], settings)
+
+    if len(discovered) > 1:
+        logger.warning(
+            "Multiple executor factories discovered (%s); "
+            "set CODA_EXECUTOR_FACTORY to choose one. Using NoopExecutor.",
+            ", ".join(discovered),
+        )
+        return NoopExecutor()
 
     logger.warning(
-        "No executor configured (set CODA_EXECUTOR_FACTORY or "
-        "CODA_DEVICE_CONFIG); using NoopExecutor"
+        "No executor configured (set CODA_EXECUTOR_FACTORY); using NoopExecutor"
     )
     return NoopExecutor()

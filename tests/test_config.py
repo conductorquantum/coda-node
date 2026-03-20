@@ -28,9 +28,8 @@ class TestSettings:
         assert settings.self_service_token == ""
         assert settings.self_service_auto_vpn is True
         assert settings.advertised_provider == "coda"
-        assert settings.opx_host == "localhost"
-        assert settings.opx_port == 80
         assert settings.connect_path == "/api/internal/qpu/connect"
+        assert settings.webapp_url == "https://coda.conductorquantum.com"
 
     def test_callback_urls(self) -> None:
         settings = Settings()
@@ -38,9 +37,6 @@ class TestSettings:
             settings.callback_url == f"{settings.webapp_url}/api/internal/qpu/webhook"
         )
         assert settings.connect_url == f"{settings.webapp_url}/api/internal/qpu/connect"
-        assert (
-            settings.register_url == f"{settings.webapp_url}/api/internal/qpu/register"
-        )
         assert settings.vpn_probe_urls == [
             f"{settings.webapp_url}/api/internal/qpu/connect",
             f"{settings.webapp_url}/api/internal/qpu/heartbeat",
@@ -103,7 +99,6 @@ class TestSettings:
                     "redis_url": "rediss://default:token@persisted:6379",
                     "webapp_url": "https://persisted.example.test",
                     "connect_path": "/api/internal/qpu/connect",
-                    "register_path": "/api/internal/qpu/register",
                     "heartbeat_path": "/api/internal/qpu/heartbeat",
                     "webhook_path": "/api/internal/qpu/webhook",
                     "vpn_required": True,
@@ -112,8 +107,6 @@ class TestSettings:
                         "https://persisted.example.test/api/internal/qpu/health"
                     ],
                     "advertised_provider": "legacy-provider",
-                    "opx_host": "persisted-opx.example.test",
-                    "opx_port": 1234,
                     "self_service_machine_fingerprint": "persisted-fingerprint",
                 }
             )
@@ -138,8 +131,39 @@ class TestSettings:
         assert settings.connect_path == "/api/internal/qpu/connect"
         assert settings.self_service_machine_fingerprint == "persisted-fingerprint"
         assert settings.advertised_provider == "coda"
-        assert settings.opx_host == "localhost"
-        assert settings.opx_port == 80
         assert settings.vpn_probe_targets == [
             "https://persisted.example.test/api/internal/qpu/health"
         ]
+
+
+class TestDefaultDeviceConfig:
+    def test_default_device_config_when_file_exists(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        site_dir = tmp_path / "site"
+        site_dir.mkdir()
+        device_yaml = site_dir / "device.yaml"
+        device_yaml.write_text("target: test\n")
+
+        monkeypatch.chdir(tmp_path)
+        settings = Settings()
+        assert settings.device_config == "site/device.yaml"
+
+    def test_no_default_device_config_when_file_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        settings = Settings()
+        assert settings.device_config == ""
+
+    def test_explicit_device_config_overrides_default(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        site_dir = tmp_path / "site"
+        site_dir.mkdir()
+        (site_dir / "device.yaml").write_text("target: test\n")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CODA_DEVICE_CONFIG", "/explicit/path.yaml")
+        settings = Settings()
+        assert settings.device_config == "/explicit/path.yaml"

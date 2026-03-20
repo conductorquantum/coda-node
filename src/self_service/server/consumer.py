@@ -21,7 +21,8 @@ from __future__ import annotations
 import asyncio
 import inspect
 import logging
-from collections.abc import Awaitable
+import time
+from collections.abc import Awaitable, Mapping
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, TypeVar, cast
 
@@ -43,6 +44,7 @@ T = TypeVar("T")
 _BACKOFF_BASE = 1.0
 _BACKOFF_FACTOR = 2.0
 _BACKOFF_MAX = 60.0
+_PENDING_RECHECK_SECS = 60.0
 
 
 async def _await_if_needed(value: T | Awaitable[T]) -> T:
@@ -91,6 +93,16 @@ class RedisConsumer:
         self.last_job_at: str | None = None
         self.redis_healthy = True
 
+    @staticmethod
+    def _decode_fields(fields: Mapping[object, object]) -> dict[str, str]:
+        """Normalise byte keys/values returned when *decode_responses* is off."""
+        return {
+            (k.decode() if isinstance(k, bytes) else str(k)): (
+                v.decode() if isinstance(v, bytes) else str(v)
+            )
+            for k, v in fields.items()
+        }
+
     async def setup(self) -> None:
         """Create the consumer group if it does not already exist.
 
@@ -111,8 +123,10 @@ class RedisConsumer:
     async def recover_pending(self) -> int:
         """Re-process messages left pending after an unclean shutdown.
 
-        Only messages idle for longer than *crash_recovery_threshold_ms*
-        are recovered, to avoid stealing work from a still-running peer.
+        Because the query is scoped to ``consumername=self._consumer_name``,
+        these are exclusively *our own* unacknowledged messages.  There is
+        no risk of stealing work from a peer, so every pending message is
+        recovered regardless of idle time.
 
         Returns:
             The number of messages that were reprocessed.
@@ -129,10 +143,6 @@ class RedisConsumer:
 
         for entry in pending:
             message_id = entry["message_id"]
-            idle_ms = entry["time_since_delivered"]
-            if idle_ms < self._crash_recovery_threshold_ms:
-                continue
-
             messages = await self._redis.xrange(
                 self._stream, min=message_id, max=message_id
             )
@@ -157,6 +167,7 @@ class RedisConsumer:
         await self.recover_pending()
 
         consecutive_failures = 0
+        last_pending_check = time.monotonic()
         while self._running:
             try:
                 messages = await self._redis.xreadgroup(
@@ -170,6 +181,10 @@ class RedisConsumer:
                 consecutive_failures = 0
 
                 if not messages:
+                    now = time.monotonic()
+                    if now - last_pending_check >= _PENDING_RECHECK_SECS:
+                        await self.recover_pending()
+                        last_pending_check = now
                     continue
 
                 for _stream_name, stream_messages in messages:
@@ -234,7 +249,9 @@ class RedisConsumer:
             )
             return False
 
-    async def _process_message(self, message_id: str, fields: dict[str, str]) -> None:
+    async def _process_message(
+        self, message_id: str, fields: Mapping[object, object]
+    ) -> None:
         """Deserialize, execute, and report a single job from the stream.
 
         Skips jobs already marked as completed.  On success, sends a
@@ -243,13 +260,31 @@ class RedisConsumer:
         Redis connection errors during status updates are logged but do
         not prevent webhook delivery.
         """
-        job_id = fields["job_id"]
-        callback_url = fields["callback_url"]
+        decoded_fields = self._decode_fields(fields)
+        try:
+            job_id = decoded_fields["job_id"]
+            callback_url = decoded_fields["callback_url"]
+        except KeyError as exc:
+            logger.error(
+                "Malformed stream message %s (missing %s), skipping. Keys: %s",
+                message_id,
+                exc,
+                sorted(decoded_fields.keys()),
+            )
+            await self._safe_xack(message_id)
+            return
 
-        status = await _await_if_needed(
+        status_raw = await _await_if_needed(
             self._redis.hget(f"qpu:job:{job_id}:status", "state")
         )
-        if status in ("completed", b"completed"):
+        status = (
+            status_raw.decode()
+            if isinstance(status_raw, bytes)
+            else str(status_raw)
+            if status_raw is not None
+            else None
+        )
+        if status == "completed":
             await self._safe_xack(message_id)
             return
 
@@ -266,8 +301,8 @@ class RedisConsumer:
         )
 
         try:
-            ir = NativeGateIR.from_json(fields["ir_json"])
-            shots = int(fields["shots"])
+            ir = NativeGateIR.from_json(decoded_fields["ir_json"])
+            shots = int(decoded_fields["shots"])
             result = await self._runner.run(ir, shots)
 
             await self._safe_hset(

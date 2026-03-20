@@ -16,6 +16,7 @@ The persisted private key is stored separately at
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 import tempfile
@@ -26,6 +27,8 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from self_service.errors import ConfigError
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "PERSISTED_CONFIG_PATH",
@@ -92,7 +95,6 @@ def load_persisted_runtime_config() -> dict[str, Any]:
         "redis_url",
         "webapp_url",
         "connect_path",
-        "register_path",
         "heartbeat_path",
         "webhook_path",
         "vpn_required",
@@ -136,12 +138,10 @@ class Settings(BaseSettings):
     jwt_private_key: str = ""
     jwt_key_id: str = ""
 
-    webapp_url: str = ""
+    webapp_url: str = "https://coda.conductorquantum.com"
     webhook_path: str = "/api/internal/qpu/webhook"
     connect_path: str = "/api/internal/qpu/connect"
-    register_path: str = "/api/internal/qpu/register"
     heartbeat_path: str = "/api/internal/qpu/heartbeat"
-    self_service_path: str = "/api/internal/qpu/self-service"
 
     host: str = "0.0.0.0"
     port: int = 8080
@@ -163,13 +163,11 @@ class Settings(BaseSettings):
     self_service_connect_headers: dict[str, str] = {}
     self_service_connect_retries: int = 3
     shutdown_drain_timeout_sec: int = 30
+    heartbeat_interval_sec: int = 30
 
     executor_factory: str = ""
     device_config: str = ""
     advertised_provider: str = "coda"
-
-    opx_host: str = "localhost"
-    opx_port: int = 80
 
     @model_validator(mode="before")
     @classmethod
@@ -193,6 +191,16 @@ class Settings(BaseSettings):
         return merged
 
     @model_validator(mode="after")
+    def apply_default_device_config(self) -> Settings:
+        """Use ``./site/device.yaml`` when no explicit device config is set."""
+        if not self.device_config:
+            default_path = Path("site/device.yaml")
+            if default_path.exists():
+                logger.info("Using default device config: %s", default_path)
+                self.device_config = default_path.as_posix()
+        return self
+
+    @model_validator(mode="after")
     def check_jwt_or_self_service(self) -> Settings:
         """Require JWT credentials unless self-service will supply them."""
 
@@ -213,11 +221,6 @@ class Settings(BaseSettings):
     def callback_url(self) -> str:
         """Full URL for webhook delivery."""
         return f"{self.webapp_url}{self.webhook_path}"
-
-    @property
-    def register_url(self) -> str:
-        """Full URL for QPU registration."""
-        return f"{self.webapp_url}{self.register_path}"
 
     @property
     def connect_url(self) -> str:

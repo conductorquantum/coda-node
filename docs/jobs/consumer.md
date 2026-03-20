@@ -26,10 +26,15 @@ Before entering the main loop, `recover_pending()` reprocesses
 messages that were claimed but never acknowledged (e.g. after an
 unclean shutdown):
 
-1. Queries `XPENDING` for messages assigned to this consumer.
-2. Filters to messages idle longer than `crash_recovery_threshold_ms`
-   (default: 60 seconds) to avoid stealing work from a peer.
-3. Re-fetches and reprocesses each qualifying message.
+1. Queries `XPENDING` for messages assigned to **this consumer only**.
+2. Re-fetches and reprocesses every pending message — no idle-time
+   filter is applied because the query is already scoped to this
+   consumer's own unacknowledged work.
+
+In addition, the main consume loop periodically re-runs
+`recover_pending()` every `_PENDING_RECHECK_SECS` (60 s) when no new
+messages arrive.  This catches messages that become stuck mid-flight
+without requiring a full restart.
 
 ## Main Consume Loop
 
@@ -72,7 +77,12 @@ prevent webhook delivery.
 
 `_process_message()` handles a single message:
 
-1. **Skip completed jobs** — if `qpu:job:{job_id}:status` shows
+1. **Normalise fields** — `_decode_fields()` converts any byte
+   keys/values to strings (defensive against a Redis client that does
+   not set `decode_responses=True`).  If required fields (`job_id`,
+   `callback_url`) are missing, the message is ACK'd and skipped with
+   an error log.
+2. **Skip completed jobs** — if `qpu:job:{job_id}:status` shows
    `completed`, the message is ACK'd and skipped.
 2. **Mark executing** — updates status hash with `state: executing`,
    `started_at`, `message_id`, `qpu_id`.

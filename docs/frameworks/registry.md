@@ -1,73 +1,56 @@
-# Framework Registry
+# Auto-Discovery
 
-The `FrameworkRegistry` maps framework names to `Framework` instances
-and provides auto-detection from a `DeviceConfig`.
+When `CODA_EXECUTOR_FACTORY` is not set, the runtime automatically
+scans installed Python packages for executor factories that follow the
+naming convention.
 
-## Registration
+## Convention
 
-### Built-in Frameworks
+Backend packages expose a factory at:
 
-Built-in frameworks (e.g. QUA) are registered eagerly by
-`default_registry()`.  The import is guarded with `try/except` so
-that missing optional dependencies (like `qm-qua`) do not prevent
-the service from booting.
-
-### Third-Party Frameworks
-
-Third-party frameworks are discovered lazily from `coda.frameworks`
-entry points on the first `get()`, `detect()`, or `registered_names`
-call.
-
-```toml
-# Third-party package's pyproject.toml
-[project.entry-points."coda.frameworks"]
-my_framework = "my_package.framework:MyFramework"
+```
+<package>.executor_factory:create_executor
 ```
 
-### Programmatic Registration
+For example, `coda-qubic` provides
+`coda_qubic.executor_factory:create_executor`.
 
-```python
-from self_service.frameworks.registry import FrameworkRegistry
+## Discovery Process
 
-registry = FrameworkRegistry()
-registry.register(MyFramework())
-```
+`_discover_executor_factories()` in `executor.py`:
 
-Duplicate names raise `ValueError`.
+1. Lists all importable top-level Python packages via
+   `importlib.metadata.packages_distributions()`.
+2. Skips internal packages (`self_service`, private `_`-prefixed
+   packages, and sub-packages with dots).
+3. For each candidate, checks whether `<pkg>.executor_factory` exists
+   using `importlib.util.find_spec()` (cheap filesystem check, no
+   import).
+4. If the module exists, imports it and checks for a callable
+   `create_executor` attribute.
+5. Collects all matches as `module:attr` import paths.
 
-## Auto-Detection
+## Resolution Rules
 
-`registry.detect(device_config)` resolves the framework in priority
-order:
-
-1. **Explicit name** — if `device_config.framework` is set, look it
-   up by name.  Raises `ConfigError` if not found.
-2. **Target matching** — find all frameworks whose
-   `supported_targets` contain `device_config.target`.
-3. **Single match** — return the one matching framework.
-4. **No match** — raise `ConfigError` listing registered frameworks.
-5. **Multiple matches** — raise `ConfigError` asking the user to set
-   `framework` explicitly.
-
-## `default_registry()`
-
-Returns a fresh `FrameworkRegistry` pre-populated with built-in
-frameworks.  Called by `load_executor()` when `CODA_DEVICE_CONFIG` is
-set.
-
-```python
-from self_service.frameworks.registry import default_registry
-
-registry = default_registry()
-print(registry.registered_names)  # ['qua']
-
-config = DeviceConfig(target="superconducting_cz", num_qubits=3)
-fw = registry.detect(config)      # → QUAFramework
-```
-
-## Error Handling
-
-| Exception | When |
+| Matches | Behavior |
 |---|---|
-| `ValueError` | Registering a framework with a duplicate name. |
-| `ConfigError` | Looking up an unknown framework name, no framework supports the target, or multiple frameworks match the target. |
+| 0 | Log a warning; fall back to `NoopExecutor`. |
+| 1 | Log an info message; use the discovered factory. |
+| 2+ | Log a warning listing all candidates; fall back to `NoopExecutor`. Set `CODA_EXECUTOR_FACTORY` explicitly to resolve. |
+
+## Explicit Override
+
+`CODA_EXECUTOR_FACTORY` always takes precedence over discovery.  When
+set, the runtime skips the scan entirely and imports the specified
+factory directly.
+
+```bash
+export CODA_EXECUTOR_FACTORY="coda_qubic.executor_factory:create_executor"
+```
+
+## Performance
+
+Discovery runs once at startup.  The `find_spec()` check is a
+lightweight filesystem lookup that does not import the package.  Only
+packages where the `executor_factory` module actually exists are
+imported.

@@ -1,94 +1,65 @@
 # Device Configuration
 
-The `DeviceConfig` model is the user's single entry point for hardware
-setup.  It is a YAML file that declares which framework and hardware
-target to use, points to a calibration file, and carries
-framework-specific connection parameters.
+`CODA_DEVICE_CONFIG` points to a YAML file that describes the hardware
+setup.  The file's schema and validation are owned entirely by the
+backend package (e.g. `coda-qubic`), not by `coda-self-service`.
 
-## YAML Schema
+## How It Works
+
+`coda-self-service` stores `CODA_DEVICE_CONFIG` as a plain string on
+`Settings.device_config`.  It does not parse, validate, or interpret
+the file.  The executor factory reads `settings.device_config`, loads
+the YAML, and builds the executor from it.
+
+### Default Path
+
+If `CODA_DEVICE_CONFIG` is not set and `./site/device.yaml` exists in
+the working directory, the runtime uses it automatically and logs an
+info message.  Explicit `CODA_DEVICE_CONFIG` always takes precedence.
+
+## Example
+
+### QubiC device config (`site/device.yaml`)
 
 ```yaml
-# Required
-target: superconducting_cz      # NativeGateIR target string
-num_qubits: 3                    # qubit count (1–50)
+target: superconducting_cnot
+num_qubits: 3
+calibration_path: ./qubitcfg.json
+channel_config_path: ./channel_config.json
+classifier_path: ./gmm_classifier_sim.pkl
 
-# Optional
-framework: qua                   # explicit framework name (auto-detected if omitted)
-calibration_path: ./calibration.yaml  # path to calibration data
-
-# Framework-specific (passed through as extra fields)
-opx_host: 192.168.1.100
-opx_port: 80
-cluster_name: my-cluster
-topology: single
+runner_mode: rpc
+rpc_host: 192.168.1.120
+rpc_port: 9095
 ```
 
-### Standard Fields
+The schema above is defined by `QubiCConfig` in `coda-qubic`.  Other
+backend packages define their own YAML schemas.
 
-| Field | Type | Required | Default | Description |
-|---|---|---|---|---|
-| `target` | `str` | Yes | — | Hardware target (must be non-empty). Matches `NativeGateIR.target`. |
-| `num_qubits` | `int` | Yes | — | Number of qubits (1–50). |
-| `framework` | `str` | No | `""` | Framework name. When empty, auto-detected from `target`. |
-| `calibration_path` | `str` | No | `""` | Path to calibration data file. Relative paths are resolved against the YAML file's directory. |
-
-### Framework-Specific Fields
-
-Any additional keys in the YAML are preserved as framework-specific
-options.  Access them via:
-
-```python
-config.get_option("opx_host")          # single key with optional default
-config.get_option("opx_port", 80)
-config.get_options()                    # dict of all extra fields
-```
-
-Each framework defines which extra fields it requires in its
-`validate_config()` method.
-
-## Loading
-
-Point `CODA_DEVICE_CONFIG` at the file:
+### Running
 
 ```bash
-export CODA_DEVICE_CONFIG="./device.yaml"
+CODA_DEVICE_CONFIG=./site/device.yaml \
+uv run coda start --token <your-token>
 ```
 
-Or load programmatically:
+Or, if `./site/device.yaml` exists, simply:
 
-```python
-from self_service.frameworks.base import DeviceConfig
-
-config = DeviceConfig.from_yaml("./device.yaml")
+```bash
+uv run coda start --token <your-token>
 ```
 
 ## Path Resolution
 
-`calibration_path` supports three modes:
+Paths inside the YAML file (e.g. `calibration_path`) are resolved by
+the backend package, not by `coda-self-service`.  Typically they are
+relative to the YAML file's parent directory.
 
-| Input | Resolution |
-|---|---|
-| Empty string | `resolved_calibration_path` returns `None`. |
-| Absolute path (`/etc/cal.yaml`) | Used as-is. |
-| Relative path (`cal.yaml`) | Resolved relative to the YAML file's parent directory (set by `from_yaml`), or `cwd` for programmatic construction. |
+## Writing a Device Config for a New Backend
 
-## Validation
+Each backend package defines its own Pydantic model for the device
+config.  The factory function reads `settings.device_config`, loads
+the file, validates it against the model, and builds the executor.
 
-`DeviceConfig` validates standard fields via Pydantic:
-
-- `target` must be non-empty (enforced by `min_length=1`).
-- `num_qubits` must be in `[1, 50]`.
-- Extra fields are preserved (not rejected).
-
-Framework-specific validation (e.g. "opx_host is required") is
-performed by the framework's `validate_config()` method, not by
-`DeviceConfig` itself.
-
-## Error Handling
-
-| Exception | When |
-|---|---|
-| `FileNotFoundError` | YAML file does not exist. |
-| `ValueError` | File content is not a YAML mapping. |
-| `pydantic.ValidationError` | Standard fields fail schema validation. |
-| `ImportError` | PyYAML is not installed. |
+See [framework-protocol.md](framework-protocol.md) for a complete
+example.
