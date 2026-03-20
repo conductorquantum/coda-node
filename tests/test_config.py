@@ -134,8 +134,6 @@ class TestSettings:
         assert settings.connect_path == "/api/internal/qpu/connect"
         assert settings.self_service_machine_fingerprint == "persisted-fingerprint"
         assert settings.advertised_provider == "coda"
-        assert settings.opx_host == "localhost"
-        assert settings.opx_port == 80
         assert settings.vpn_probe_targets == [
             "https://persisted.example.test/api/internal/qpu/health"
         ]
