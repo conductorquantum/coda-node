@@ -16,6 +16,7 @@ The persisted private key is stored separately at
 from __future__ import annotations
 
 import json
+import logging
 import os
 import stat
 import tempfile
@@ -26,6 +27,8 @@ from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from self_service.errors import ConfigError
+
+logger = logging.getLogger(__name__)
 
 __all__ = [
     "PERSISTED_CONFIG_PATH",
@@ -136,7 +139,7 @@ class Settings(BaseSettings):
     jwt_private_key: str = ""
     jwt_key_id: str = ""
 
-    webapp_url: str = ""
+    webapp_url: str = "https://coda.conductorquantum.com"
     webhook_path: str = "/api/internal/qpu/webhook"
     connect_path: str = "/api/internal/qpu/connect"
     register_path: str = "/api/internal/qpu/register"
@@ -188,6 +191,16 @@ class Settings(BaseSettings):
             if key not in merged or current in ("", None, []):
                 merged[key] = value
         return merged
+
+    @model_validator(mode="after")
+    def apply_default_device_config(self) -> Settings:
+        """Use ``./site/device.yaml`` when no explicit device config is set."""
+        if not self.device_config:
+            default_path = Path("site/device.yaml")
+            if default_path.exists():
+                logger.info("Using default device config: %s", default_path)
+                self.device_config = str(default_path)
+        return self
 
     @model_validator(mode="after")
     def check_jwt_or_self_service(self) -> Settings:

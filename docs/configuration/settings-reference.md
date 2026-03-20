@@ -17,7 +17,7 @@ Complete field reference for the `Settings` class in
 | Field | Type | Default | Env Var | Description |
 |---|---|---|---|---|
 | `redis_url` | `str` | `""` | `CODA_REDIS_URL` | Redis connection string. |
-| `webapp_url` | `str` | `""` | `CODA_WEBAPP_URL` | Coda cloud base URL. |
+| `webapp_url` | `str` | `"https://coda.conductorquantum.com"` | `CODA_WEBAPP_URL` | Coda cloud base URL. Overridden by the self-service bundle on connect. |
 | `host` | `str` | `"0.0.0.0"` | `CODA_HOST` | FastAPI bind address. |
 | `port` | `int` | `8080` | `CODA_PORT` | FastAPI bind port. |
 
@@ -64,11 +64,9 @@ Complete field reference for the `Settings` class in
 
 | Field | Type | Default | Env Var | Description |
 |---|---|---|---|---|
-| `executor_factory` | `str` | `""` | `CODA_EXECUTOR_FACTORY` | Import path for custom executor. |
-| `device_config` | `str` | `""` | `CODA_DEVICE_CONFIG` | Path to a YAML device configuration file for framework-based execution. See [Device Configuration](../frameworks/device-config.md). |
+| `executor_factory` | `str` | `""` | `CODA_EXECUTOR_FACTORY` | Import path for a custom executor factory (`module:attr` format). When unset, the runtime auto-discovers factories. See [Executor Factory Convention](../frameworks/framework-protocol.md). |
+| `device_config` | `str` | `""` | `CODA_DEVICE_CONFIG` | Path to a YAML device configuration file, read by the executor factory. Defaults to `./site/device.yaml` if that file exists. See [Device Configuration](../frameworks/device-config.md). |
 | `advertised_provider` | `str` | `"coda"` | `CODA_ADVERTISED_PROVIDER` | Legacy local metadata field. Not used by the self-service connect handshake. |
-| `opx_host` | `str` | `"localhost"` | `CODA_OPX_HOST` | Optional local executor setting for an OPX controller hostname. Not sent to the cloud connect endpoint. |
-| `opx_port` | `int` | `80` | `CODA_OPX_PORT` | Optional local executor setting for an OPX controller port. Not sent to the cloud connect endpoint. |
 
 ## Resilience
 

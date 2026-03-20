@@ -15,8 +15,8 @@ Coda.
 - Consumes jobs from Redis Streams with crash recovery
 - Sends JWT-signed webhook results to Coda with retry
 - Drains in-flight work on graceful shutdown
-- Supports pluggable execution backends
-- Auto-detects hardware frameworks from a device configuration file
+- Supports pluggable execution backends via factory convention
+- Auto-discovers executor factories from installed packages
 
 ## Install
 
@@ -88,11 +88,11 @@ previously persisted config from disk.
 | `CODA_JWT_PRIVATE_KEY` | `""` | PEM-encoded RSA private key for direct JWT startup. |
 | `CODA_JWT_KEY_ID` | `""` | `kid` header value for signed JWTs. |
 | `CODA_REDIS_URL` | `""` | Redis connection string (`redis://…`). |
-| `CODA_WEBAPP_URL` | `""` | Coda cloud base URL. |
+| `CODA_WEBAPP_URL` | `https://coda.conductorquantum.com` | Coda cloud base URL. Overridden by the self-service bundle on first connect. |
 | `CODA_HOST` | `0.0.0.0` | Bind address for the FastAPI server. |
 | `CODA_PORT` | `8080` | Bind port for the FastAPI server. |
 | `CODA_EXECUTOR_FACTORY` | `""` | Import path for a custom executor (see below). |
-| `CODA_DEVICE_CONFIG` | `""` | Path to a YAML device config for framework-based execution (see below). |
+| `CODA_DEVICE_CONFIG` | `""` | Path to a YAML device config read by the executor factory. Defaults to `./site/device.yaml` if that file exists. |
 
 Provide either `CODA_SELF_SERVICE_TOKEN` for auto-provisioning, or both
 `CODA_JWT_PRIVATE_KEY` and `CODA_JWT_KEY_ID` for direct JWT startup.
@@ -176,52 +176,30 @@ coda reset
 
 Stop the daemon and VPN, then remove all persisted runtime files.
 
-## Hardware Frameworks
+## Executor Resolution
 
-For hardware backends that use a device configuration file (YAML), set
-`CODA_DEVICE_CONFIG` to point at your device config:
+`load_executor()` resolves the execution backend in priority order:
 
-```bash
-export CODA_DEVICE_CONFIG="./device.yaml"
-export CODA_SELF_SERVICE_TOKEN="..."
-coda start
-```
+1. **`CODA_EXECUTOR_FACTORY`** (explicit) -- set to a `module:attribute`
+   import path to force a specific executor factory.
+2. **Convention-based auto-discovery** -- scan installed packages for
+   `<pkg>.executor_factory:create_executor`.  If exactly one match is
+   found, use it.  If multiple match, log a warning and fall back.
+3. **`NoopExecutor`** fallback -- returns deterministic all-zeros results,
+   allowing the service to boot without hardware integration.
 
-The runtime loads the config, auto-detects the appropriate framework
-from the device target (or an explicit `framework` field), validates
-the configuration, and creates the executor automatically.
+### Factory Convention
 
-Example `device.yaml`:
+Backend packages should expose a factory at
+`<package>.executor_factory:create_executor`.  The factory must be
+either:
 
-```yaml
-target: superconducting_cz
-num_qubits: 3
-calibration_path: ./calibration.yaml
-opx_host: 192.168.1.100
-```
+- A callable that accepts a `Settings` object and returns an object
+  with an async `run(ir, shots)` method.
+- A callable that accepts no parameters and returns the same.
+- A pre-built object that already has a `run` method.
 
-Third-party frameworks can be installed as Python packages and are
-discovered automatically via `coda.frameworks` entry points.  See
-[`docs/frameworks/`](docs/frameworks/INDEX.md) for full details on
-creating a framework.
-
-## Custom Executor
-
-When neither `CODA_EXECUTOR_FACTORY` nor `CODA_DEVICE_CONFIG` is set,
-the runtime uses a built-in `NoopExecutor` that returns deterministic
-all-zeros results, allowing the service to boot without hardware
-integration.
-
-To connect a real backend, point the variable at a `module:attribute`
-import path:
-
-```bash
-export CODA_EXECUTOR_FACTORY="my_project.executor:create_executor"
-```
-
-The target must be either a pre-built object with a `run` method, or a
-callable factory.  If the factory accepts parameters, the `Settings`
-object is passed in automatically.
+### Example: Custom Executor
 
 ```python
 from self_service.server.executor import ExecutionResult
@@ -240,6 +218,13 @@ class MyExecutor:
 
 def create_executor() -> MyExecutor:
     return MyExecutor()
+```
+
+Place this in `my_package/executor_factory.py` and install the package.
+The runtime will discover it automatically.  Or set it explicitly:
+
+```bash
+export CODA_EXECUTOR_FACTORY="my_package.executor_factory:create_executor"
 ```
 
 ## Error Handling
@@ -311,10 +296,10 @@ uv run pre-commit run --all-files
 
 ## Architecture
 
-- **FastAPI** — HTTP service, lifespan management, health endpoints
-- **Pydantic Settings** — environment-driven configuration with layered
+- **FastAPI** -- HTTP service, lifespan management, health endpoints
+- **Pydantic Settings** -- environment-driven configuration with layered
   defaults and persisted state
-- **Redis Streams** — job delivery with consumer groups and crash recovery
-- **httpx** — async HTTP for webhooks and self-service API calls
-- **RS256 JWT** — authentication between the node and the Coda cloud
-- **OpenVPN** — managed as a subprocess when VPN connectivity is required
+- **Redis Streams** -- job delivery with consumer groups and crash recovery
+- **httpx** -- async HTTP for webhooks and self-service API calls
+- **RS256 JWT** -- authentication between the node and the Coda cloud
+- **OpenVPN** -- managed as a subprocess when VPN connectivity is required

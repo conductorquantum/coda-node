@@ -29,6 +29,7 @@ class TestSettings:
         assert settings.self_service_auto_vpn is True
         assert settings.advertised_provider == "coda"
         assert settings.connect_path == "/api/internal/qpu/connect"
+        assert settings.webapp_url == "https://coda.conductorquantum.com"
 
     def test_callback_urls(self) -> None:
         settings = Settings()
@@ -137,3 +138,36 @@ class TestSettings:
         assert settings.vpn_probe_targets == [
             "https://persisted.example.test/api/internal/qpu/health"
         ]
+
+
+class TestDefaultDeviceConfig:
+    def test_default_device_config_when_file_exists(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        site_dir = tmp_path / "site"
+        site_dir.mkdir()
+        device_yaml = site_dir / "device.yaml"
+        device_yaml.write_text("target: test\n")
+
+        monkeypatch.chdir(tmp_path)
+        settings = Settings()
+        assert settings.device_config == "site/device.yaml"
+
+    def test_no_default_device_config_when_file_missing(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        monkeypatch.chdir(tmp_path)
+        settings = Settings()
+        assert settings.device_config == ""
+
+    def test_explicit_device_config_overrides_default(
+        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    ) -> None:
+        site_dir = tmp_path / "site"
+        site_dir.mkdir()
+        (site_dir / "device.yaml").write_text("target: test\n")
+
+        monkeypatch.chdir(tmp_path)
+        monkeypatch.setenv("CODA_DEVICE_CONFIG", "/explicit/path.yaml")
+        settings = Settings()
+        assert settings.device_config == "/explicit/path.yaml"
