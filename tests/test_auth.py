@@ -34,8 +34,8 @@ class TestGenerateKeypair:
         assert first.public_key_pem != second.public_key_pem
 
     def test_key_size(self, keypair: KeyPair) -> None:
-        from cryptography.hazmat.primitives.serialization import load_pem_private_key
         from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+        from cryptography.hazmat.primitives.serialization import load_pem_private_key
 
         private_key = load_pem_private_key(
             keypair.private_key_pem.encode(), password=None
