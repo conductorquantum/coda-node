@@ -280,7 +280,9 @@ class RedisConsumer:
         status = (
             status_raw.decode()
             if isinstance(status_raw, bytes)
-            else str(status_raw) if status_raw is not None else None
+            else str(status_raw)
+            if status_raw is not None
+            else None
         )
         if status == "completed":
             await self._safe_xack(message_id)
