@@ -168,9 +168,6 @@ class Settings(BaseSettings):
     device_config: str = ""
     advertised_provider: str = "coda"
 
-    opx_host: str = "localhost"
-    opx_port: int = 80
-
     @model_validator(mode="before")
     @classmethod
     def merge_persisted_runtime_config(cls, data: Any) -> Any:

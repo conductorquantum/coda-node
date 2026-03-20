@@ -28,8 +28,6 @@ class TestSettings:
         assert settings.self_service_token == ""
         assert settings.self_service_auto_vpn is True
         assert settings.advertised_provider == "coda"
-        assert settings.opx_host == "localhost"
-        assert settings.opx_port == 80
         assert settings.connect_path == "/api/internal/qpu/connect"
 
     def test_callback_urls(self) -> None:
@@ -112,8 +110,6 @@ class TestSettings:
                         "https://persisted.example.test/api/internal/qpu/health"
                     ],
                     "advertised_provider": "legacy-provider",
-                    "opx_host": "persisted-opx.example.test",
-                    "opx_port": 1234,
                     "self_service_machine_fingerprint": "persisted-fingerprint",
                 }
             )

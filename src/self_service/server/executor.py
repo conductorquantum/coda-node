@@ -9,9 +9,7 @@ Executor resolution order (in :func:`load_executor`):
 1. If ``CODA_EXECUTOR_FACTORY`` is set, import the dotted path and use
    it as either a pre-built executor instance (has ``.run``) or a
    factory callable.
-2. If ``CODA_DEVICE_CONFIG`` points to a YAML file, auto-detect the
-   appropriate framework and create an executor.
-3. Otherwise fall back to :class:`NoopExecutor`, which returns a
+2. Otherwise fall back to :class:`NoopExecutor`, which returns a
    deterministic all-zeros bitstring for every job.
 """
 
@@ -115,35 +113,6 @@ def _load_from_factory(settings: Settings) -> JobExecutor:
     return cast(JobExecutor, executor)
 
 
-def _load_from_device_config(settings: Settings) -> JobExecutor:
-    """Load the framework-based executor from ``CODA_DEVICE_CONFIG``."""
-    from self_service.frameworks.base import DeviceConfig
-    from self_service.frameworks.registry import default_registry
-
-    try:
-        config = DeviceConfig.from_yaml(settings.device_config)
-    except FileNotFoundError:
-        raise ExecutorError(
-            f"Device config not found: {settings.device_config}"
-        ) from None
-    except Exception as exc:
-        raise ExecutorError(
-            f"Invalid device config {settings.device_config!r}: {exc}"
-        ) from exc
-
-    registry = default_registry()
-    framework = registry.detect(config)
-
-    errors = framework.validate_config(config)
-    if errors:
-        raise ExecutorError(
-            f"Device config validation failed ({framework.name!r}):\n"
-            + "\n".join(f"  - {e}" for e in errors)
-        )
-
-    return framework.create_executor(config, settings)
-
-
 def load_executor(settings: Settings) -> JobExecutor:
     """Resolve and instantiate the configured execution backend.
 
@@ -151,9 +120,7 @@ def load_executor(settings: Settings) -> JobExecutor:
 
     1. If ``settings.executor_factory`` is set, import and use it
        (pre-built executor or factory callable).
-    2. If ``settings.device_config`` points to a YAML file, auto-detect
-       the appropriate framework and create an executor.
-    3. Fall back to :class:`NoopExecutor` with a warning.
+    2. Fall back to :class:`NoopExecutor` with a warning.
 
     Args:
         settings: Runtime settings.
@@ -163,16 +130,12 @@ def load_executor(settings: Settings) -> JobExecutor:
 
     Raises:
         ExecutorError: If the configured executor cannot be loaded.
-        ConfigError: If the device config references an unknown framework.
     """
     if settings.executor_factory:
         return _load_from_factory(settings)
 
-    if settings.device_config:
-        return _load_from_device_config(settings)
-
     logger.warning(
-        "No executor configured (set CODA_EXECUTOR_FACTORY or "
-        "CODA_DEVICE_CONFIG); using NoopExecutor"
+        "No executor configured (set CODA_EXECUTOR_FACTORY); "
+        "using NoopExecutor"
     )
     return NoopExecutor()
