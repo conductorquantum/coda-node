@@ -168,8 +168,7 @@ def _start_openvpn(profile_path: str) -> None:
         creationflags |= getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
         creationflags |= getattr(subprocess, "DETACHED_PROCESS", 0)
         creationflags |= getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        log_handle = OPENVPN_LOG_PATH.open("a", encoding="utf-8")
-        try:
+        with OPENVPN_LOG_PATH.open("a", encoding="utf-8") as log_handle:
             process = subprocess.Popen(
                 [
                     openvpn_bin,
@@ -182,8 +181,6 @@ def _start_openvpn(profile_path: str) -> None:
                 stderr=subprocess.STDOUT,
                 creationflags=creationflags,
             )
-        finally:
-            log_handle.close()
         OPENVPN_PID_PATH.write_text(f"{process.pid}\n")
         return
 

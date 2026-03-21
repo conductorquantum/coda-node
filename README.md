@@ -25,24 +25,21 @@ Coda.
 uv sync --dev
 ```
 
-Requires Python 3.11+.  Two equivalent CLI entry points are installed:
-
-- `coda`
-- `coda-self-service`
+Requires Python 3.11+.  A `coda-self-service` CLI entry point is installed.
 
 ## Quick Start
 
 Provision with a self-service token:
 
 ```bash
-uv run coda start --token <self-service-token>
+uv run coda-self-service start --token <self-service-token>
 ```
 
 Or set the token as an environment variable:
 
 ```bash
 export CODA_SELF_SERVICE_TOKEN=<self-service-token>
-uv run coda start
+uv run coda-self-service start
 ```
 
 After a successful first run, credentials are persisted to disk and
@@ -130,50 +127,50 @@ read.  They enable token-free reconnects across restarts, preserving JWT
 credentials, machine fingerprint, VPN profile path, and connection
 settings.
 
-To wipe persisted state, run `coda reset`.
+To wipe persisted state, run `coda-self-service reset`.
 
 ## CLI
 
 ```
-coda start [--token TOKEN] [--host HOST] [--port PORT] [--daemon]
+coda-self-service start [--token TOKEN] [--host HOST] [--port PORT] [--daemon]
 ```
 
 Start the node server.  Pass `--token` on first run for self-service
 provisioning.  Use `--daemon` (or `-d`) to run as a background process.
 
 ```
-coda stop
+coda-self-service stop
 ```
 
 Stop the background daemon process.
 
 ```
-coda status
+coda-self-service status
 ```
 
 Show daemon status (running/stopped, PID, log file, VPN interface).
 
 ```
-coda logs [-n LINES]
+coda-self-service logs [-n LINES]
 ```
 
 Show recent daemon log output (default: last 50 lines).
 
 ```
-coda doctor
+coda-self-service doctor
 ```
 
 Print a diagnostic summary (endpoints, executor, VPN interface, OpenVPN
 status).
 
 ```
-coda stop-vpn
+coda-self-service stop-vpn
 ```
 
 Stop the managed OpenVPN daemon without clearing credentials.
 
 ```
-coda reset
+coda-self-service reset
 ```
 
 Stop the daemon and VPN, then remove all persisted runtime files.

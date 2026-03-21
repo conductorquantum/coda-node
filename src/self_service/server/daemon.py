@@ -146,9 +146,7 @@ def start_daemon(
     ]
 
     # Open log file for output redirection
-    log_handle = DAEMON_LOG_PATH.open("a", encoding="utf-8")
-
-    try:
+    with DAEMON_LOG_PATH.open("a", encoding="utf-8") as log_handle:
         if os.name == "nt":
             # Windows: use creation flags to detach
             creationflags = 0
@@ -173,8 +171,6 @@ def start_daemon(
                 env=env,
                 start_new_session=True,
             )
-    finally:
-        log_handle.close()
 
     # Write PID file
     DAEMON_PID_PATH.write_text(f"{process.pid}\n")

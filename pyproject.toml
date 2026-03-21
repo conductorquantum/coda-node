@@ -4,12 +4,36 @@ build-backend = "hatchling.build"
 
 [project]
 name = "coda-self-service"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Minimal server runtime for connecting execution backends to Coda."
 readme = "README.md"
 requires-python = ">=3.11"
-license = { file = "LICENSE" }
-authors = [{ name = "Conductor Quantum" }]
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [{ name = "Conductor Quantum", email = "engineering@conductorquantum.com" }]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Framework :: AsyncIO",
+    "Framework :: FastAPI",
+    "Framework :: Pydantic",
+    "Framework :: Pydantic :: 2",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Operating System :: POSIX",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Scientific/Engineering :: Physics",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
 dependencies = [
     "cryptography>=41.0.0",
     "fastapi>=0.115.0",
@@ -22,8 +46,13 @@ dependencies = [
 ]
 
 [project.scripts]
-coda = "self_service.server.cli:main"
 coda-self-service = "self_service.server.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/conductorquantum/coda-self-service"
+Repository = "https://github.com/conductorquantum/coda-self-service"
+Issues = "https://github.com/conductorquantum/coda-self-service/issues"
+Changelog = "https://github.com/conductorquantum/coda-self-service/blob/main/CHANGELOG.md"
 
 [dependency-groups]
 dev = [
@@ -35,8 +64,15 @@ dev = [
     "ruff>=0.11.0",
 ]
 
+[tool.hatch.version]
+path = "src/self_service/__init__.py"
+
 [tool.hatch.build.targets.wheel]
 packages = ["src/self_service"]
+exclude = ["src/self_service/frameworks"]
+
+[tool.hatch.build.targets.sdist]
+exclude = ["src/self_service/frameworks"]
 
 [tool.pytest.ini_options]
 addopts = "-ra --strict-markers --strict-config"

@@ -1,7 +1,6 @@
 """Command-line interface for the Coda node runtime.
 
-Provides the ``coda`` (and ``coda-self-service``) entry points with
-subcommands:
+Provides the ``coda-self-service`` entry point with subcommands:
 
 * ``start`` -- launch the FastAPI server with optional ``--token`` for
   first-time self-service provisioning. Use ``--daemon`` to run in the
@@ -262,9 +261,9 @@ def main() -> None:
                 print(f"  Started daemon (PID {pid})")
                 print(f"  Log file: {DAEMON_LOG_PATH}")
                 print()
-                print("  Use 'coda stop' to stop the daemon")
-                print("  Use 'coda status' to check daemon status")
-                print("  Use 'coda logs' to view log output")
+                print("  Use 'coda-self-service stop' to stop the daemon")
+                print("  Use 'coda-self-service status' to check daemon status")
+                print("  Use 'coda-self-service logs' to view log output")
             except RuntimeError as exc:
                 print(f"  Failed to start daemon: {exc}")
                 raise SystemExit(1) from None

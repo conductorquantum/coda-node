@@ -138,7 +138,7 @@ def _discover_executor_factories() -> list[str]:
             continue
         try:
             mod = importlib.import_module(module_name)
-        except Exception:
+        except (ImportError, AttributeError, TypeError):
             logger.warning(
                 "Failed to import executor_factory module %r, skipping",
                 module_name,
