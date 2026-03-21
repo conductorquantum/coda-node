@@ -68,6 +68,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
             interface_hint=settings.vpn_interface_hint,
             check_interval_sec=settings.vpn_check_interval_sec,
             vpn_required=settings.vpn_required,
+            extra_headers=settings.self_service_connect_headers,
         )
         vpn_status = await guard.preflight()
         if (
@@ -91,6 +92,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
             qpu_id=settings.qpu_id,
             jwt_private_key=settings.jwt_private_key,
             jwt_key_id=settings.jwt_key_id,
+            extra_headers=settings.self_service_connect_headers,
         )
         consumer = RedisConsumer(
             redis=redis_client,
@@ -107,6 +109,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
             consumer=consumer,
             interval=settings.heartbeat_interval_sec,
             connectivity=connectivity,
+            extra_headers=settings.self_service_connect_headers,
         )
 
         watch_task = asyncio.create_task(guard.watch(_on_vpn_state_change))

@@ -233,12 +233,16 @@ def detect_tun_interface(hint: str | None = None) -> str | None:
     return None
 
 
-async def _probe_target(url: str, timeout: float = 5.0) -> ProbeResult:
+async def _probe_target(
+    url: str,
+    timeout: float = 5.0,
+    extra_headers: dict[str, str] | None = None,
+) -> ProbeResult:
     """Send an HTTP HEAD to *url* and return a :class:`ProbeResult`."""
     started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=timeout, verify=True) as client:
-            response = await client.head(url)
+            response = await client.head(url, headers=extra_headers or {})
             latency_ms = round((time.monotonic() - started) * 1000, 1)
             return ProbeResult(
                 target=url,
@@ -279,6 +283,8 @@ class VPNGuard:
         check_interval_sec: Seconds between background health checks.
         vpn_required: When ``False``, preflight passes even without a
             detected tunnel (useful for local development).
+        extra_headers: Additional HTTP headers merged into every probe
+            request (e.g. deployment-protection bypass).
     """
 
     def __init__(
@@ -287,11 +293,13 @@ class VPNGuard:
         interface_hint: str | None = None,
         check_interval_sec: int = 10,
         vpn_required: bool = True,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._probe_targets = probe_targets or []
         self._interface_hint = interface_hint
         self._check_interval = check_interval_sec
         self._vpn_required = vpn_required
+        self._extra_headers = extra_headers or {}
         self._state = ServiceState.BOOTING
         self._running = False
 
@@ -339,7 +347,9 @@ class VPNGuard:
 
         probes: list[ProbeResult] = []
         for target in self._probe_targets:
-            probes.append(await _probe_target(target))
+            probes.append(
+                await _probe_target(target, extra_headers=self._extra_headers)
+            )
 
         failed = [probe for probe in probes if not probe.ok]
         if failed and self._vpn_required:

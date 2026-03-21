@@ -74,6 +74,8 @@ class WebhookClient:
         jwt_key_id: ``kid`` header value for the JWT.
         timeout: HTTP request timeout in seconds.
         max_retries: Maximum number of delivery attempts per webhook.
+        extra_headers: Additional HTTP headers merged into every
+            webhook request (e.g. deployment-protection bypass).
     """
 
     def __init__(
@@ -83,11 +85,13 @@ class WebhookClient:
         jwt_key_id: str,
         timeout: float = 30.0,
         max_retries: int = _MAX_RETRIES,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._qpu_id = qpu_id
         self._jwt_private_key = jwt_private_key
         self._jwt_key_id = jwt_key_id
         self._max_retries = max_retries
+        self._extra_headers = extra_headers or {}
         self._client = httpx.AsyncClient(timeout=timeout)
 
     async def _post_with_retry(
@@ -103,7 +107,10 @@ class WebhookClient:
                 response = await self._client.post(
                     url,
                     json=body,
-                    headers={"Authorization": f"Bearer {token}"},
+                    headers={
+                        "Authorization": f"Bearer {token}",
+                        **self._extra_headers,
+                    },
                 )
                 response.raise_for_status()
                 return

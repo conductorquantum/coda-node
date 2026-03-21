@@ -44,6 +44,8 @@ class HeartbeatClient:
         connectivity: Undirected qubit-topology edge list (e.g.
             ``[[0, 1], [1, 2]]``).  Sent with every heartbeat so the
             cloud compiler can perform topology-aware routing.
+        extra_headers: Additional HTTP headers merged into every
+            heartbeat request (e.g. deployment-protection bypass).
     """
 
     def __init__(
@@ -55,6 +57,7 @@ class HeartbeatClient:
         consumer: RedisConsumer,
         interval: int = _DEFAULT_INTERVAL,
         connectivity: list[list[int]] | None = None,
+        extra_headers: dict[str, str] | None = None,
     ) -> None:
         self._url = heartbeat_url
         self._qpu_id = qpu_id
@@ -63,6 +66,7 @@ class HeartbeatClient:
         self._consumer = consumer
         self._interval = interval
         self._connectivity = connectivity
+        self._extra_headers = extra_headers or {}
         self._running = False
         self._client = httpx.AsyncClient(timeout=_HTTP_TIMEOUT)
 
@@ -78,7 +82,7 @@ class HeartbeatClient:
         response = await self._client.post(
             self._url,
             json=body,
-            headers={"Authorization": f"Bearer {token}"},
+            headers={"Authorization": f"Bearer {token}", **self._extra_headers},
         )
         response.raise_for_status()
 

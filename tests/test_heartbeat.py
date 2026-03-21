@@ -185,6 +185,31 @@ def test_send_failure_does_not_crash_loop(_mock_sign: MagicMock) -> None:
     assert mock_http.post.call_count >= 1
 
 
+@patch("self_service.server.heartbeat.sign_token", return_value="mock-jwt")
+def test_send_includes_extra_headers(_mock_sign: MagicMock) -> None:
+    mock_response = AsyncMock()
+    mock_response.raise_for_status = lambda: None
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_response)
+
+    consumer = _make_consumer()
+    client = HeartbeatClient(
+        heartbeat_url="https://example.com/heartbeat",
+        qpu_id="qpu-1",
+        jwt_private_key="fake-key",
+        jwt_key_id="kid-1",
+        consumer=consumer,
+        extra_headers={"x-vercel-protection-bypass": "secret123"},
+    )
+    client._client = mock_http
+
+    asyncio.run(client._send())
+
+    headers = mock_http.post.call_args[1]["headers"]
+    assert headers["Authorization"] == "Bearer mock-jwt"
+    assert headers["x-vercel-protection-bypass"] == "secret123"
+
+
 @pytest.mark.asyncio
 async def test_close_stops_and_closes_http() -> None:
     mock_http = AsyncMock()

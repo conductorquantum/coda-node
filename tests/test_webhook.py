@@ -30,6 +30,29 @@ def test_send_result_posts_json(_mock_token: AsyncMock) -> None:
 
 
 @patch("self_service.server.webhook.sign_token", return_value="mock-jwt-token")
+def test_send_result_includes_extra_headers(_mock_token: AsyncMock) -> None:
+    mock_response = AsyncMock()
+    mock_response.raise_for_status = lambda: None
+    mock_client = AsyncMock()
+    mock_client.post = AsyncMock(return_value=mock_response)
+
+    client = WebhookClient(
+        "node-1",
+        "mock-private-key",
+        "mock-key-id",
+        extra_headers={"x-vercel-protection-bypass": "secret123"},
+    )
+    client._client = mock_client
+
+    payload = WebhookPayload(job_id="job-1", status="completed")
+    asyncio.run(client.send_result("https://example.com/callback", payload))
+
+    headers = mock_client.post.call_args[1]["headers"]
+    assert headers["Authorization"] == "Bearer mock-jwt-token"
+    assert headers["x-vercel-protection-bypass"] == "secret123"
+
+
+@patch("self_service.server.webhook.sign_token", return_value="mock-jwt-token")
 def test_send_error_convenience(_mock_token: AsyncMock) -> None:
     mock_response = AsyncMock()
     mock_response.raise_for_status = lambda: None
