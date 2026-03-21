@@ -69,10 +69,10 @@ class NativeGate(StrEnum):
     CP = "cp"               # Two-qubit controlled-phase
     RXX = "rxx"             # Two-qubit XX rotation
     ID = "id"               # Identity (single-qubit, 1 param)
-    X90 = "x90"             # Fixed π/2 X rotation (QubiC native)
-    Y_MINUS_90 = "y_minus_90"  # Fixed −π/2 Y rotation (QubiC native)
-    VIRTUAL_Z = "virtual_z" # Virtual Z rotation (QubiC native)
-    CNOT = "cnot"           # Two-qubit CNOT (QubiC native)
+    X90 = "x90"             # Fixed π/2 X rotation
+    Y_MINUS_90 = "y_minus_90"  # Fixed −π/2 Y rotation
+    VIRTUAL_Z = "virtual_z" # Virtual Z rotation
+    CNOT = "cnot"           # Two-qubit CNOT
 ```
 
 ## Gate Specifications

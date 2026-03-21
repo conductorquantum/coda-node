@@ -1,7 +1,7 @@
 # Executor Factory Convention
 
 `coda-self-service` is completely framework-agnostic.  It does not know
-about any specific hardware control system (QubiC, QUA, etc.).  Backend
+about any specific hardware control system.  Backend
 integration is achieved through a simple executor factory convention.
 
 ## Topics
@@ -15,7 +15,7 @@ integration is achieved through a simple executor factory convention.
 ## How It Fits Together
 
 ```
-Backend package (e.g. coda-qubic)
+Backend package (e.g. coda-acme)
 exposes: <pkg>.executor_factory:create_executor
         |
         v

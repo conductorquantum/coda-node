@@ -46,9 +46,9 @@ PERSISTED_PRIVATE_KEY_PATH = Path(tempfile.gettempdir()) / "coda-private-key"
 }
 ```
 
-Executor-specific local settings such as `CODA_OPX_HOST` and `CODA_OPX_PORT`
-are not part of the persisted self-service contract; they should be supplied
-explicitly via environment variables when needed.
+Executor-specific local settings are not part of the persisted self-service
+contract; they should be supplied explicitly via environment variables when
+needed.
 
 ## Write Path
 

@@ -97,7 +97,7 @@ Set `CODA_EXECUTOR_FACTORY` explicitly to skip discovery and force a
 specific factory:
 
 ```bash
-export CODA_EXECUTOR_FACTORY="coda_qubic.executor_factory:create_executor"
+export CODA_EXECUTOR_FACTORY="coda_acme.executor_factory:create_executor"
 ```
 
 See [Auto-Discovery](../frameworks/registry.md) for details.

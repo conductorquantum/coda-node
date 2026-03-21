@@ -64,8 +64,8 @@ top-level Python packages for the naming convention:
 <package>.executor_factory:create_executor
 ```
 
-For example, if `coda-qubic` is installed, the runtime finds
-`coda_qubic.executor_factory:create_executor` and uses it
+For example, if `coda-acme` is installed, the runtime finds
+`coda_acme.executor_factory:create_executor` and uses it
 automatically.
 
 If multiple packages match the convention, the runtime logs a warning

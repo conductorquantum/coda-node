@@ -61,14 +61,6 @@ The VPN infrastructure and connect endpoint are introduced in
 src/self_service/
 ├── __init__.py          # Package exports (CodaError, app, create_app)
 ├── errors.py            # Exception hierarchy
-├── frameworks/
-│   ├── __init__.py      # Public API (DeviceConfig, Framework, FrameworkRegistry)
-│   ├── base.py          # DeviceConfig model, Framework protocol
-│   ├── registry.py      # FrameworkRegistry, default_registry(), entry-point discovery
-│   ├── qua/
-│   │   └── __init__.py  # QUAFramework — Quantum Machines OPX (stub)
-│   └── qubic/
-│       └── __init__.py  # QubiCFramework — LBNL QubiC (stub)
 ├── server/
 │   ├── __init__.py      # Re-exports app, create_app
 │   ├── app.py           # FastAPI app, lifespan, health endpoints

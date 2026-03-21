@@ -12,8 +12,8 @@ Backend packages expose a factory at:
 <package>.executor_factory:create_executor
 ```
 
-For example, `coda-qubic` provides
-`coda_qubic.executor_factory:create_executor`.
+For example, a backend package `coda-acme` would provide
+`coda_acme.executor_factory:create_executor`.
 
 ## Discovery Process
 
@@ -45,7 +45,7 @@ set, the runtime skips the scan entirely and imports the specified
 factory directly.
 
 ```bash
-export CODA_EXECUTOR_FACTORY="coda_qubic.executor_factory:create_executor"
+export CODA_EXECUTOR_FACTORY="coda_acme.executor_factory:create_executor"
 ```
 
 ## Performance

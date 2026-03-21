@@ -1,8 +1,8 @@
 # Device Configuration
 
 `CODA_DEVICE_CONFIG` points to a YAML file that describes the hardware
-setup.  The file's schema and validation are owned entirely by the
-backend package (e.g. `coda-qubic`), not by `coda-self-service`.
+setup.  The file's schema and validation are owned entirely by the backend
+package, not by `coda-self-service`.
 
 ## How It Works
 
@@ -19,22 +19,17 @@ info message.  Explicit `CODA_DEVICE_CONFIG` always takes precedence.
 
 ## Example
 
-### QubiC device config (`site/device.yaml`)
+### Sample device config (`site/device.yaml`)
 
 ```yaml
-target: superconducting_cnot
-num_qubits: 3
-calibration_path: ./qubitcfg.json
-channel_config_path: ./channel_config.json
-classifier_path: ./gmm_classifier_sim.pkl
-
-runner_mode: rpc
-rpc_host: 192.168.1.120
-rpc_port: 9095
+target: superconducting_cz
+num_qubits: 5
+host: 192.168.1.120
+port: 9095
 ```
 
-The schema above is defined by `QubiCConfig` in `coda-qubic`.  Other
-backend packages define their own YAML schemas.
+The schema is defined by the backend package, not by `coda-self-service`.
+Each backend defines its own YAML schema and Pydantic model.
 
 ### Running
 

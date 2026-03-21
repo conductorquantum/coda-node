@@ -419,8 +419,6 @@ class TestSelfServiceSettings:
         assert persisted["jwt_private_key_path"] == str(key_path)
         assert persisted["connect_path"] == "/api/internal/qpu/connect"
         assert persisted["self_service_machine_fingerprint"]
-        assert "opx_host" not in persisted
-        assert "opx_port" not in persisted
         assert "advertised_provider" not in persisted
         if os.name != "nt":
             assert config_path.stat().st_mode & 0o777 == 0o600
