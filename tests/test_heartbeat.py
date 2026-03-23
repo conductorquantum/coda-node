@@ -100,6 +100,31 @@ def test_send_includes_connectivity(_mock_sign: MagicMock) -> None:
 
 
 @patch("self_service.server.heartbeat.sign_token", return_value="mock-jwt")
+def test_send_includes_directed_connectivity(_mock_sign: MagicMock) -> None:
+    """Directed edges preserve (control, target) orientation in the payload."""
+    mock_response = AsyncMock()
+    mock_response.raise_for_status = lambda: None
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_response)
+
+    consumer = _make_consumer()
+    client = HeartbeatClient(
+        heartbeat_url="https://example.com/heartbeat",
+        qpu_id="qpu-1",
+        jwt_private_key="fake-key",
+        jwt_key_id="kid-1",
+        consumer=consumer,
+        connectivity=[[1, 0], [2, 1]],
+    )
+    client._client = mock_http
+
+    asyncio.run(client._send())
+
+    body = mock_http.post.call_args[1]["json"]
+    assert body["connectivity"] == [[1, 0], [2, 1]]
+
+
+@patch("self_service.server.heartbeat.sign_token", return_value="mock-jwt")
 def test_send_connectivity_none_when_not_provided(_mock_sign: MagicMock) -> None:
     mock_response = AsyncMock()
     mock_response.raise_for_status = lambda: None

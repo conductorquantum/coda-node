@@ -41,9 +41,11 @@ class HeartbeatClient:
         jwt_key_id: ``kid`` header value for the JWT.
         consumer: The Redis consumer whose readiness state is reported.
         interval: Seconds between heartbeat POSTs.
-        connectivity: Undirected qubit-topology edge list (e.g.
-            ``[[0, 1], [1, 2]]``).  Sent with every heartbeat so the
-            cloud compiler can perform topology-aware routing.
+        connectivity: Qubit-topology edge list (e.g. ``[[1, 0], [2, 1]]``).
+            For directed gate sets (CNOT) the order is ``[ctrl, tgt]``; for
+            symmetric gate sets (CZ, iSWAP) the order is ignored by the
+            cloud compiler.  Sent with every heartbeat so the cloud
+            compiler can perform topology-aware routing.
         extra_headers: Additional HTTP headers merged into every
             heartbeat request (e.g. deployment-protection bypass).
     """
