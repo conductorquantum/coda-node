@@ -82,11 +82,13 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
         runner = executor or load_executor(settings)
 
         device_spec = getattr(runner, "device", None)
-        connectivity: list[list[int]] | None = (
-            [list(e) for e in device_spec.logical_edges]
-            if device_spec is not None
-            else None
-        )
+        connectivity: list[list[int]] | None = None
+        if device_spec is not None:
+            directed = getattr(device_spec, "directed_edges", None)
+            if directed is not None:
+                connectivity = [list(e) for e in directed]
+            else:
+                connectivity = [list(e) for e in device_spec.logical_edges]
 
         webhook = WebhookClient(
             qpu_id=settings.qpu_id,
