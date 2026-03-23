@@ -39,7 +39,7 @@ def _resolve_connectivity(device_spec: object | None) -> list[list[int]] | None:
     directed = getattr(device_spec, "directed_edges", None)
     if directed:
         return [list(e) for e in directed]
-    return [list(e) for e in device_spec.logical_edges]  # type: ignore[union-attr]
+    return [list(e) for e in device_spec.logical_edges]  # type: ignore[attr-defined]
 
 
 async def _on_vpn_state_change(state: ServiceState) -> None:
