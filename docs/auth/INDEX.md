@@ -9,8 +9,8 @@ self-service provisioning.
 
 | Document | Summary |
 |---|---|
-| [signing.md](signing.md) | Token creation, claims, headers, and verification. |
-| [keypair-lifecycle.md](keypair-lifecycle.md) | Key generation, storage, rotation, and revocation. |
+| [SIGNING.md](SIGNING.md) | Token creation, claims, headers, and verification. |
+| [KEYPAIR_LIFECYCLE.md](KEYPAIR_LIFECYCLE.md) | Key generation, storage, rotation, and revocation. |
 
 ## Key Files
 

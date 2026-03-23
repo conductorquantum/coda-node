@@ -116,7 +116,7 @@ The node receives the `.ovpn` profile in `vpn.client_profile_ovpn` of
 the connect response and:
 
 1. Validates it against dangerous directives (see
-   [tunnel-lifecycle.md](tunnel-lifecycle.md)).
+   [TUNNEL_LIFECYCLE.md](TUNNEL_LIFECYCLE.md)).
 2. Writes it to disk with `0600` permissions.
 3. Launches an OpenVPN daemon.
 4. Waits for the tunnel interface to appear.

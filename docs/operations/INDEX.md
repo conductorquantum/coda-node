@@ -7,10 +7,10 @@ and the exception hierarchy.
 
 | Document | Summary |
 |---|---|
-| [health-endpoints.md](health-endpoints.md) | `/health` and `/ready` endpoints for liveness and readiness probes. |
-| [graceful-shutdown.md](graceful-shutdown.md) | Shutdown sequence: drain, cancel, close, cleanup. |
-| [cli.md](cli.md) | `coda` CLI subcommands: `start`, `stop`, `status`, `logs`, `doctor`, `reset`, `stop-vpn`. |
-| [error-handling.md](error-handling.md) | `CodaError` exception hierarchy and when each type is raised. |
+| [HEALTH_ENDPOINTS.md](HEALTH_ENDPOINTS.md) | `/health` and `/ready` endpoints for liveness and readiness probes. |
+| [GRACEFUL_SHUTDOWN.md](GRACEFUL_SHUTDOWN.md) | Shutdown sequence: drain, cancel, close, cleanup. |
+| [CLI.md](CLI.md) | `coda` CLI subcommands: `start`, `stop`, `status`, `logs`, `doctor`, `reset`, `stop-vpn`. |
+| [ERROR_HANDLING.md](ERROR_HANDLING.md) | `CodaError` exception hierarchy and when each type is raised. |
 
 ## Key Files
 

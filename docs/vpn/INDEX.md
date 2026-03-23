@@ -14,16 +14,16 @@ QPU node and the Coda cloud. It handles three concerns:
 > `connection_mode` is `"vpn"` (the default). When `connection_mode` is
 > `"https"`, the cloud sets `vpn.required = false` and omits the VPN
 > profile. The node skips OpenVPN entirely and VPNGuard passes preflight
-> unconditionally. See [Connect Protocol](../self-service/connect-protocol.md)
+> unconditionally. See [Connect Protocol](../self-service/CONNECT_PROTOCOL.md)
 > for details on connection modes.
 
 ## Topics
 
 | Document | Summary |
 |---|---|
-| [tunnel-lifecycle.md](tunnel-lifecycle.md) | OpenVPN profile handling, daemon management, and tunnel detection. |
-| [health-monitoring.md](health-monitoring.md) | VPNGuard preflight checks and background watch loop. |
-| [cloud-infrastructure.md](cloud-infrastructure.md) | AWS Client VPN architecture and per-QPU certificate issuance on the cloud side. |
+| [TUNNEL_LIFECYCLE.md](TUNNEL_LIFECYCLE.md) | OpenVPN profile handling, daemon management, and tunnel detection. |
+| [HEALTH_MONITORING.md](HEALTH_MONITORING.md) | VPNGuard preflight checks and background watch loop. |
+| [CLOUD_INFRASTRUCTURE.md](CLOUD_INFRASTRUCTURE.md) | AWS Client VPN architecture and per-QPU certificate issuance on the cloud side. |
 
 ## Key Files
 

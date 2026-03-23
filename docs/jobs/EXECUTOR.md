@@ -150,7 +150,7 @@ export CODA_EXECUTOR_FACTORY="my_project.executor_factory:create_executor"
 
 - [Executor Factory Convention](../frameworks/INDEX.md) -- naming
   convention and auto-discovery details.
-- [Settings Reference](../configuration/settings-reference.md) --
+- [Settings Reference](../configuration/SETTINGS_REFERENCE.md) --
   `executor_factory` and `device_config` fields.
-- [Environment Variables](../configuration/environment-variables.md) --
+- [Environment Variables](../configuration/ENVIRONMENT_VARIABLES.md) --
   `CODA_EXECUTOR_FACTORY` and `CODA_DEVICE_CONFIG`.

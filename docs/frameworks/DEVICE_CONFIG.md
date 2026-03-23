@@ -56,5 +56,5 @@ Each backend package defines its own Pydantic model for the device
 config.  The factory function reads `settings.device_config`, loads
 the file, validates it against the model, and builds the executor.
 
-See [framework-protocol.md](framework-protocol.md) for a complete
+See [FRAMEWORK_PROTOCOL.md](FRAMEWORK_PROTOCOL.md) for a complete
 example.

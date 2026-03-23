@@ -23,9 +23,9 @@ controls whether VPN infrastructure is provisioned:
 
 | Document | Summary |
 |---|---|
-| [connect-protocol.md](connect-protocol.md) | The `/connect` handshake: request/response format, auth modes, and error handling. |
-| [token-lifecycle.md](token-lifecycle.md) | Self-service token creation, redemption, expiry, and revocation on the cloud side. |
-| [credential-persistence.md](credential-persistence.md) | How the node persists and reloads JWT credentials, VPN profiles, and runtime config across restarts. |
+| [CONNECT_PROTOCOL.md](CONNECT_PROTOCOL.md) | The `/connect` handshake: request/response format, auth modes, and error handling. |
+| [TOKEN_LIFECYCLE.md](TOKEN_LIFECYCLE.md) | Self-service token creation, redemption, expiry, and revocation on the cloud side. |
+| [CREDENTIAL_PERSISTENCE.md](CREDENTIAL_PERSISTENCE.md) | How the node persists and reloads JWT credentials, VPN profiles, and runtime config across restarts. |
 
 ## Key Files
 

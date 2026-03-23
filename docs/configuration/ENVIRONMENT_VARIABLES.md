@@ -100,4 +100,4 @@ specific factory:
 export CODA_EXECUTOR_FACTORY="coda_acme.executor_factory:create_executor"
 ```
 
-See [Auto-Discovery](../frameworks/registry.md) for details.
+See [Auto-Discovery](../frameworks/REGISTRY.md) for details.

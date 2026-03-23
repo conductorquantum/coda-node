@@ -8,9 +8,9 @@ integration is achieved through a simple executor factory convention.
 
 | Document | Summary |
 |---|---|
-| [device-config.md](device-config.md) | How `CODA_DEVICE_CONFIG` passes device configuration to executor factories. |
-| [framework-protocol.md](framework-protocol.md) | How to implement a backend package with the factory convention. |
-| [registry.md](registry.md) | Auto-discovery: how the runtime finds executor factories at startup. |
+| [DEVICE_CONFIG.md](DEVICE_CONFIG.md) | How `CODA_DEVICE_CONFIG` passes device configuration to executor factories. |
+| [FRAMEWORK_PROTOCOL.md](FRAMEWORK_PROTOCOL.md) | How to implement a backend package with the factory convention. |
+| [REGISTRY.md](REGISTRY.md) | Auto-discovery: how the runtime finds executor factories at startup. |
 
 ## How It Fits Together
 
@@ -45,11 +45,11 @@ exposes: <pkg>.executor_factory:create_executor
 
 ## Cross-References
 
-- [Executor backends](../jobs/executor.md) -- `JobExecutor` protocol
+- [Executor backends](../jobs/EXECUTOR.md) -- `JobExecutor` protocol
   and `ExecutionResult` format.
-- [IR schema](../jobs/ir-schema.md) -- `NativeGateIR` targets and gate
+- [IR schema](../jobs/IR_SCHEMA.md) -- `NativeGateIR` targets and gate
   sets.
-- [Settings reference](../configuration/settings-reference.md) --
+- [Settings reference](../configuration/SETTINGS_REFERENCE.md) --
   `executor_factory` and `device_config` fields.
-- [Environment variables](../configuration/environment-variables.md)
+- [Environment variables](../configuration/ENVIRONMENT_VARIABLES.md)
   -- `CODA_EXECUTOR_FACTORY` and `CODA_DEVICE_CONFIG`.

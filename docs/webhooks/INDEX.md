@@ -9,8 +9,8 @@ so the cloud can verify the sender.
 
 | Document | Summary |
 |---|---|
-| [delivery.md](delivery.md) | `WebhookClient` — signing, serialization, retry logic, and error handling. |
-| [payload-format.md](payload-format.md) | `WebhookPayload` — field definitions and serialization rules. |
+| [DELIVERY.md](DELIVERY.md) | `WebhookClient` — signing, serialization, retry logic, and error handling. |
+| [PAYLOAD_FORMAT.md](PAYLOAD_FORMAT.md) | `WebhookPayload` — field definitions and serialization rules. |
 
 ## Key Files
 

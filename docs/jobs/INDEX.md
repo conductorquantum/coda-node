@@ -9,9 +9,9 @@ and acknowledging messages.
 
 | Document | Summary |
 |---|---|
-| [consumer.md](consumer.md) | `RedisConsumer` — stream consumption, consumer groups, crash recovery, resilience. |
-| [ir-schema.md](ir-schema.md) | `NativeGateIR` — circuit format, validation, gate sets, and target hardware. |
-| [executor.md](executor.md) | `JobExecutor` protocol, `NoopExecutor`, device config, and custom backend integration. |
+| [CONSUMER.md](CONSUMER.md) | `RedisConsumer` — stream consumption, consumer groups, crash recovery, resilience. |
+| [IR_SCHEMA.md](IR_SCHEMA.md) | `NativeGateIR` — circuit format, validation, gate sets, and target hardware. |
+| [EXECUTOR.md](EXECUTOR.md) | `JobExecutor` protocol, `NoopExecutor`, device config, and custom backend integration. |
 
 ## Key Files
 

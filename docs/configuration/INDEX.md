@@ -8,8 +8,8 @@ variables, persisted state, and defaults. The `Settings` class
 
 | Document | Summary |
 |---|---|
-| [settings-reference.md](settings-reference.md) | Complete field reference for the `Settings` class. |
-| [environment-variables.md](environment-variables.md) | All `CODA_`-prefixed environment variables. |
+| [SETTINGS_REFERENCE.md](SETTINGS_REFERENCE.md) | Complete field reference for the `Settings` class. |
+| [ENVIRONMENT_VARIABLES.md](ENVIRONMENT_VARIABLES.md) | All `CODA_`-prefixed environment variables. |
 
 ## Key Files
 

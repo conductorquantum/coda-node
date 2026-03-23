@@ -50,7 +50,7 @@ The public key is stored in the `jwt_keys` table:
 ### Node Side
 
 The private key is persisted to `/tmp/coda-private-key` with `0600`
-permissions (see [credential-persistence.md](../self-service/credential-persistence.md)).
+permissions (see [CREDENTIAL_PERSISTENCE.md](../self-service/CREDENTIAL_PERSISTENCE.md)).
 
 The key ID is stored in `/tmp/coda.config` as `jwt_key_id`.
 
