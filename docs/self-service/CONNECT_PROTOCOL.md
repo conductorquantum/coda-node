@@ -60,6 +60,7 @@ default 3).
 {
   "qpu_id": "my-qpu",
   "qpu_display_name": "My QPU",
+  "qpu_label": "My QPU",
   "native_gate_set": "superconducting_cz",
   "num_qubits": 5,
   "jwt_private_key": "-----BEGIN PRIVATE KEY-----\n...",
@@ -115,9 +116,10 @@ In HTTPS mode, the node skips OpenVPN setup and the VPN guard passes preflight u
 
 `apply_self_service_bundle()` in `vpn/service.py` processes the response:
 
-1. Extracts and validates required fields (`qpu_id`, `qpu_display_name`,
-   `native_gate_set`, `num_qubits`, `jwt_private_key`, `jwt_key_id`,
-   `redis_url`, `webapp_url`/`cloud_base_url`).
+1. Extracts and validates required fields (`qpu_id`,
+   `qpu_display_name`/`qpu_label`, `native_gate_set`, `num_qubits`,
+   `jwt_private_key`, `jwt_key_id`, `redis_url`,
+   `webapp_url`/`cloud_base_url`).
 2. Updates optional API path overrides (`connect_path`, `register_path`,
    `heartbeat_path`, `webhook_path`).
 3. Processes the `vpn` block:
