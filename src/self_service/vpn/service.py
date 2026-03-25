@@ -450,7 +450,9 @@ async def apply_self_service_bundle(settings: Settings, bundle: dict[str, Any]) 
             setup fails.
     """
     settings.qpu_id = _as_str(bundle, "qpu_id")
-    settings.qpu_display_name = _as_str(bundle, "qpu_display_name")
+    settings.qpu_display_name = (
+        bundle.get("qpu_display_name") or bundle.get("qpu_label") or ""
+    )
     settings.native_gate_set = _as_str(bundle, "native_gate_set")
     settings.num_qubits = _as_int(bundle, "num_qubits", settings.num_qubits)
     jwt_private_key = bundle.get("jwt_private_key")

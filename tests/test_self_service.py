@@ -263,6 +263,20 @@ class TestApplySelfServiceBundle:
         assert settings.connect_path == "/api/internal/qpu/connect"
 
     @pytest.mark.asyncio
+    async def test_accepts_qpu_label_field(self) -> None:
+        settings = Settings()
+        settings.self_service_auto_vpn = False
+        bundle = _sample_bundle()
+        bundle.pop("qpu_display_name")
+        bundle["qpu_label"] = "Label Node"
+        vpn = cast(dict[str, Any], bundle["vpn"])
+        vpn["required"] = False
+
+        await apply_self_service_bundle(settings, bundle)
+
+        assert settings.qpu_display_name == "Label Node"
+
+    @pytest.mark.asyncio
     async def test_reconnect_bundle_keeps_existing_private_key(self) -> None:
         settings = Settings()
         settings.self_service_auto_vpn = False
