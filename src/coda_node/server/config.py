@@ -156,9 +156,7 @@ class Settings(BaseSettings):
     node_timeout_sec: int = 15
     node_machine_fingerprint: str = ""
     node_auto_vpn: bool = True
-    node_vpn_profile_path: str = (
-        f"{tempfile.gettempdir()}/coda-node.ovpn"
-    )
+    node_vpn_profile_path: str = f"{tempfile.gettempdir()}/coda-node.ovpn"
 
     node_connect_headers: dict[str, str] = {}
     node_connect_retries: int = 3

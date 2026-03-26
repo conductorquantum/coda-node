@@ -58,8 +58,8 @@ __all__ = [
     "apply_node_bundle",
     "connect_settings",
     "ensure_persisted_vpn",
-    "fetch_reconnect_bundle",
     "fetch_node_bundle",
+    "fetch_reconnect_bundle",
     "kill_openvpn_daemon",
     "node_settings",
 ]
@@ -326,9 +326,7 @@ async def _post_connect(
     last_exc: Exception | None = None
     for attempt in range(1, max_retries + 1):
         try:
-            async with httpx.AsyncClient(
-                timeout=settings.node_timeout_sec
-            ) as client:
+            async with httpx.AsyncClient(timeout=settings.node_timeout_sec) as client:
                 headers = {
                     "Authorization": auth_header,
                     **settings.node_connect_headers,
@@ -522,9 +520,7 @@ async def apply_node_bundle(settings: Settings, bundle: dict[str, Any]) -> None:
                 detect_tun_interface, settings.vpn_interface_hint
             )
             if iface is None:
-                await asyncio.to_thread(
-                    _start_openvpn, settings.node_vpn_profile_path
-                )
+                await asyncio.to_thread(_start_openvpn, settings.node_vpn_profile_path)
                 await _wait_for_tunnel(hint=settings.vpn_interface_hint)
 
 

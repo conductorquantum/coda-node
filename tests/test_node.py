@@ -19,8 +19,8 @@ from coda_node.vpn.service import (
     apply_node_bundle,
     connect_settings,
     ensure_persisted_vpn,
-    fetch_reconnect_bundle,
     fetch_node_bundle,
+    fetch_reconnect_bundle,
     kill_openvpn_daemon,
     node_settings,
 )
@@ -164,9 +164,7 @@ class TestPostConnectRetry:
             client.__aexit__ = AsyncMock(return_value=False)
             mock_cls.return_value = client
 
-            with patch(
-                "coda_node.vpn.service.asyncio.sleep", new_callable=AsyncMock
-            ):
+            with patch("coda_node.vpn.service.asyncio.sleep", new_callable=AsyncMock):
                 result = await _post_connect(
                     settings,
                     auth_header="Bearer tok",
@@ -413,9 +411,7 @@ class TestNodeSettings:
 
         config_path = tmp_path / "coda.config"
         key_path = tmp_path / "coda-private-key"
-        monkeypatch.setattr(
-            "coda_node.vpn.service.PERSISTED_CONFIG_PATH", config_path
-        )
+        monkeypatch.setattr("coda_node.vpn.service.PERSISTED_CONFIG_PATH", config_path)
         monkeypatch.setattr(
             "coda_node.vpn.service.PERSISTED_PRIVATE_KEY_PATH", key_path
         )
@@ -480,9 +476,7 @@ class TestReconnectWorkflow:
         profile_path = tmp_path / "coda-node.ovpn"
         profile_path.write_text("client\nremote vpn.example.com 443\n")
 
-        monkeypatch.setattr(
-            "coda_node.vpn.service.PERSISTED_CONFIG_PATH", config_path
-        )
+        monkeypatch.setattr("coda_node.vpn.service.PERSISTED_CONFIG_PATH", config_path)
 
         settings = Settings()
         settings.jwt_private_key = "placeholder"
