@@ -97,7 +97,8 @@ Each target defines which gates are legal:
 | Target | Legal Gates |
 |---|---|
 | `cz` | `rx`, `ry`, `rz`, `cz`, `id` |
-| `iswap` | `rx`, `ry`, `rz`, `iswap`, `cp`, `id` |
+| `iswap` | `rx`, `ry`, `rz`, `iswap`, `id` |
+| `pcz` | `rx`, `ry`, `rz`, `cp`, `id` |
 | `cnot` | `rx`, `ry`, `rz`, `x90`, `y_minus_90`, `virtual_z`, `cnot`, `id` |
 
 ## Validation

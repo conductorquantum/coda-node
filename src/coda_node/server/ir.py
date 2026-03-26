@@ -2,7 +2,7 @@
 
 Jobs received from the Coda cloud carry a JSON-serialized circuit in
 this IR format.  The IR is target-aware: each hardware target (e.g.
-``cz``, ``cnot``) defines a legal gate set, and
+``cz``, ``cnot``, ``pcz``) defines a legal gate set, and
 the validators reject programs that use gates outside that set or
 reference qubits beyond the device's capacity.
 
@@ -70,7 +70,8 @@ GATE_SPECS: dict[str, dict[str, int]] = {
 
 LEGAL_GATES: dict[str, set[str]] = {
     "cz": {"rx", "ry", "rz", "cz", "id"},
-    "iswap": {"rx", "ry", "rz", "iswap", "cp", "id"},
+    "iswap": {"rx", "ry", "rz", "iswap", "id"},
+    "pcz": {"rx", "ry", "rz", "cp", "id"},
     "cnot": {
         "rx",
         "ry",
