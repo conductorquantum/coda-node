@@ -43,7 +43,7 @@ class HeartbeatClient:
         interval: Seconds between heartbeat POSTs.
         connectivity: Qubit-topology edge list (e.g. ``[[1, 0], [2, 1]]``).
             For directed gate sets (CNOT) the order is ``[ctrl, tgt]``; for
-            symmetric gate sets (CZ, iSWAP) the order is ignored by the
+            symmetric gate sets (CZ, iSWAP, pCZ) the order is ignored by the
             cloud compiler.  Sent with every heartbeat so the cloud
             compiler can perform topology-aware routing.
         extra_headers: Additional HTTP headers merged into every
