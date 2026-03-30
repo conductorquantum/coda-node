@@ -1,8 +1,8 @@
 # Execution Backends
 
 The `JobExecutor` protocol defines the interface that all execution
-backends must implement. The consumer is backend-agnostic -- it only
-calls `executor.run(ir, shots)`.
+backends must implement. The consumer is backend-agnostic for normal
+execution -- it always calls `executor.run(ir, shots)`.
 
 ## JobExecutor Protocol
 
@@ -11,6 +11,24 @@ class JobExecutor(Protocol):
     async def run(self, ir: NativeGateIR, shots: int) -> ExecutionResult:
         ...
 ```
+
+### Optional Cooperative Cancellation Hook
+
+Executors can optionally expose a `cancel_current_job()` method:
+
+```python
+class MyExecutor:
+    async def run(self, ir: NativeGateIR, shots: int) -> ExecutionResult:
+        ...
+
+    def cancel_current_job(self) -> None:
+        ...
+```
+
+If present, `RedisConsumer` calls this hook when the cloud writes
+`qpu:job:cancelled:{job_id}` for an already-running job. This hook is
+best-effort: it lets an executor stop hardware work or set an internal
+cancel flag before the consumer cancels the in-process `run()` task.
 
 ### ExecutionResult
 
@@ -148,6 +166,10 @@ export CODA_EXECUTOR_FACTORY="my_project.executor_factory:create_executor"
   targets, and factories that don't return a valid runner.
 - Exceptions thrown during `executor.run()` are caught by the consumer,
   logged, and reported as failed jobs via webhook.
+- If the cloud cancels an in-flight job, the consumer suppresses the
+  webhook and marks the Redis status as `cancelled` instead. Executors
+  that implement `cancel_current_job()` get a chance to stop underlying
+  work before the task is cancelled.
 
 ## Cross-References
 

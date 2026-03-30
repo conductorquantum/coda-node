@@ -32,7 +32,7 @@ from coda_node.server.ir import NativeGateIR
 from coda_node.server.webhook import WebhookPayload
 
 if TYPE_CHECKING:
-    from coda_node.server.executor import JobExecutor
+    from coda_node.server.executor import ExecutionResult, JobExecutor
     from coda_node.server.webhook import WebhookClient
 
 logger = logging.getLogger(__name__)
@@ -45,6 +45,11 @@ _BACKOFF_BASE = 1.0
 _BACKOFF_FACTOR = 2.0
 _BACKOFF_MAX = 60.0
 _PENDING_RECHECK_SECS = 60.0
+_CANCEL_POLL_INTERVAL_SECS = 0.25
+
+
+class _JobCancelledWhileExecuting(Exception):
+    """Raised when the cloud cancels a job after execution has started."""
 
 
 async def _await_if_needed(value: T | Awaitable[T]) -> T:
@@ -249,16 +254,76 @@ class RedisConsumer:
             )
             return False
 
+    async def _has_cancel_signal(self, job_id: str) -> bool:
+        cancel_raw = await _await_if_needed(self._redis.get(f"qpu:job:cancelled:{job_id}"))
+        return cancel_raw is not None
+
+    async def _mark_job_cancelled(self, job_id: str, message_id: str) -> None:
+        await self._safe_hset(
+            f"qpu:job:{job_id}:status",
+            {
+                "state": "cancelled",
+                "cancelled_at": datetime.now(UTC).isoformat(),
+                "message_id": message_id,
+                "qpu_id": self._qpu_id,
+            },
+        )
+
+    async def _request_runner_cancel(self, job_id: str) -> None:
+        cancel_current_job = getattr(self._runner, "cancel_current_job", None)
+        if not callable(cancel_current_job):
+            return
+
+        try:
+            await _await_if_needed(cancel_current_job())
+        except Exception:
+            logger.warning("Executor cancel hook failed for job %s", job_id, exc_info=True)
+
+    async def _run_job_with_cancellation(
+        self, job_id: str, ir: NativeGateIR, shots: int
+    ) -> ExecutionResult:
+        run_task = asyncio.create_task(self._runner.run(ir, shots))
+        try:
+            while True:
+                done, _pending = await asyncio.wait(
+                    {run_task},
+                    timeout=_CANCEL_POLL_INTERVAL_SECS,
+                )
+                if run_task in done:
+                    result = await run_task
+                    if await self._has_cancel_signal(job_id):
+                        raise _JobCancelledWhileExecuting
+                    return result
+
+                if await self._has_cancel_signal(job_id):
+                    logger.info("Cancellation detected for executing job %s", job_id)
+                    await self._request_runner_cancel(job_id)
+                    run_task.cancel()
+                    try:
+                        await run_task
+                    except asyncio.CancelledError:
+                        pass
+                    except Exception:
+                        logger.info(
+                            "Executor raised after cancellation for job %s",
+                            job_id,
+                            exc_info=True,
+                        )
+                    raise _JobCancelledWhileExecuting
+        finally:
+            if not run_task.done():
+                run_task.cancel()
+
     async def _process_message(
         self, message_id: str, fields: Mapping[object, object]
     ) -> None:
         """Deserialize, execute, and report a single job from the stream.
 
-        Skips jobs already marked as completed.  On success, sends a
-        result webhook; on failure, sends an error webhook.  The message
-        is always acknowledged so it does not re-enter the pending list.
-        Redis connection errors during status updates are logged but do
-        not prevent webhook delivery.
+        Skips jobs already marked as completed or cancelled. On success,
+        sends a result webhook; on failure, sends an error webhook. The
+        message is always acknowledged so it does not re-enter the
+        pending list. Redis connection errors during status updates are
+        logged but do not prevent webhook delivery.
         """
         decoded_fields = self._decode_fields(fields)
         try:
@@ -284,7 +349,12 @@ class RedisConsumer:
             if status_raw is not None
             else None
         )
-        if status == "completed":
+        if status in {"completed", "cancelled"}:
+            await self._safe_xack(message_id)
+            return
+
+        if await self._has_cancel_signal(job_id):
+            await self._mark_job_cancelled(job_id, message_id)
             await self._safe_xack(message_id)
             return
 
@@ -303,7 +373,9 @@ class RedisConsumer:
         try:
             ir = NativeGateIR.from_json(decoded_fields["ir_json"])
             shots = int(decoded_fields["shots"])
-            result = await self._runner.run(ir, shots)
+            result = await self._run_job_with_cancellation(job_id, ir, shots)
+            if await self._has_cancel_signal(job_id):
+                raise _JobCancelledWhileExecuting
 
             await self._safe_hset(
                 f"qpu:job:{job_id}:status",
@@ -312,6 +384,8 @@ class RedisConsumer:
                     "completed_at": datetime.now(UTC).isoformat(),
                 },
             )
+            if await self._has_cancel_signal(job_id):
+                raise _JobCancelledWhileExecuting
 
             payload = WebhookPayload(
                 job_id=job_id,
@@ -322,7 +396,15 @@ class RedisConsumer:
             )
             await self._webhook.send_result(callback_url, payload)
             self.last_job_at = datetime.now(UTC).isoformat()
+        except _JobCancelledWhileExecuting:
+            await self._mark_job_cancelled(job_id, message_id)
+            logger.info("Cancelled executing job %s before webhook delivery", job_id)
+            return
         except Exception as exc:
+            if await self._has_cancel_signal(job_id):
+                await self._mark_job_cancelled(job_id, message_id)
+                logger.info("Cancelled executing job %s while handling terminal state", job_id)
+                return
             logger.error("Job %s failed: %s", job_id, exc, exc_info=True)
             await self._safe_hset(
                 f"qpu:job:{job_id}:status",

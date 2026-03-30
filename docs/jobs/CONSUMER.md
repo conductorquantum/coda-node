@@ -3,6 +3,12 @@
 `RedisConsumer` reads jobs from a Redis Stream using consumer groups
 and dispatches them to the configured executor.
 
+The cloud can cancel a queued or already-running job by writing
+`qpu:job:cancelled:{job_id}`. The consumer checks that key before
+dispatch, continues polling it while the executor is running, and marks
+the Redis job state as `cancelled` instead of emitting a terminal
+webhook.
+
 ## Consumer Group Setup
 
 On startup, `setup()` creates the consumer group if it doesn't exist:
@@ -82,17 +88,30 @@ prevent webhook delivery.
    not set `decode_responses=True`).  If required fields (`job_id`,
    `callback_url`) are missing, the message is ACK'd and skipped with
    an error log.
-2. **Skip completed jobs** — if `qpu:job:{job_id}:status` shows
-   `completed`, the message is ACK'd and skipped.
-2. **Mark executing** — updates status hash with `state: executing`,
+2. **Skip completed/cancelled jobs** — if `qpu:job:{job_id}:status`
+   already shows `completed` or `cancelled`, the message is ACK'd and
+   skipped. If the cloud-side cancel signal key
+   `qpu:job:cancelled:{job_id}` exists, the consumer first marks the
+   Redis status hash as `cancelled`, then ACKs and skips the message.
+3. **Mark executing** — updates status hash with `state: executing`,
    `started_at`, `message_id`, `qpu_id`.
-3. **Parse and execute** — deserializes `ir_json` into `NativeGateIR`,
-   calls `runner.run(ir, shots)`.
-4. **On success** — marks status as `completed`, builds a
+4. **Parse and execute** — deserializes `ir_json` into `NativeGateIR`,
+   then runs the executor inside a cancellable task. While the task is
+   in flight, the consumer polls `qpu:job:cancelled:{job_id}` every
+   `_CANCEL_POLL_INTERVAL_SECS` seconds. When the key appears, the
+   consumer:
+   - calls the executor's optional `cancel_current_job()` hook if it
+     exists,
+   - cancels the in-process `runner.run(...)` task,
+   - marks the Redis status hash as `cancelled`,
+   - skips both success and error webhooks.
+5. **On success** — if no cancel signal arrived, marks status as
+   `completed`, builds a
    `WebhookPayload` with counts, sends via webhook.
-5. **On failure** — marks status as `failed` with error message
+6. **On failure** — if no cancel signal arrived, marks status as
+   `failed` with error message
    (truncated to 500 chars), sends error webhook.
-6. **Finally** — ACKs the message and clears `current_job_id`.
+7. **Finally** — ACKs the message and clears `current_job_id`.
 
 ## Graceful Drain
 

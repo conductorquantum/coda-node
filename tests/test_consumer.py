@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 import redis.asyncio as aioredis
 
+import coda_node.server.consumer as consumer_module
 from coda_node.server.consumer import RedisConsumer
 from coda_node.server.executor import ExecutionResult
 
@@ -16,6 +17,7 @@ class MockRedis:
         self._groups_created: set[str] = set()
         self._acked: list[str] = []
         self._hashes: dict[str, dict[str, str]] = {}
+        self._values: dict[str, str] = {}
 
     async def xgroup_create(
         self, name: str, groupname: str, id: str, mkstream: bool = False
@@ -60,6 +62,9 @@ class MockRedis:
 
     async def hset(self, name: str, mapping: dict[str, str]) -> None:
         self._hashes.setdefault(name, {}).update(mapping)
+
+    async def get(self, name: str) -> str | None:
+        return self._values.get(name)
 
 
 @pytest.fixture
@@ -157,6 +162,78 @@ class TestConsumer:
         )
         mock_runner.run.assert_not_called()
         assert "msg-2" in mock_redis._acked
+
+    def test_skips_cancelled_job_before_execution(
+        self,
+        consumer: RedisConsumer,
+        mock_redis: MockRedis,
+        mock_runner: AsyncMock,
+        mock_webhook: AsyncMock,
+    ) -> None:
+        mock_redis._values["qpu:job:cancelled:job-1"] = "1"
+        asyncio.run(
+            consumer._process_message(
+                "msg-cancelled",
+                {
+                    "job_id": "job-1",
+                    "ir_json": VALID_IR_JSON,
+                    "shots": "1024",
+                    "callback_url": "https://example.com/callback",
+                },
+            )
+        )
+        mock_runner.run.assert_not_called()
+        mock_webhook.send_result.assert_not_called()
+        assert "msg-cancelled" in mock_redis._acked
+        assert mock_redis._hashes["qpu:job:job-1:status"]["state"] == "cancelled"
+
+    def test_cancels_job_during_execution_and_skips_webhook(
+        self,
+        consumer: RedisConsumer,
+        mock_redis: MockRedis,
+        mock_webhook: AsyncMock,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        class BlockingRunner:
+            def __init__(self) -> None:
+                self.started = asyncio.Event()
+                self.cancel_calls = 0
+
+            async def run(self, ir, shots):
+                self.started.set()
+                await asyncio.Future()
+
+            async def cancel_current_job(self) -> None:
+                self.cancel_calls += 1
+
+        runner = BlockingRunner()
+        consumer._runner = runner  # type: ignore[assignment]
+        monkeypatch.setattr(consumer_module, "_CANCEL_POLL_INTERVAL_SECS", 0.01)
+
+        async def scenario() -> None:
+            task = asyncio.create_task(
+                consumer._process_message(
+                    "msg-inflight-cancel",
+                    {
+                        "job_id": "job-4",
+                        "ir_json": VALID_IR_JSON,
+                        "shots": "1024",
+                        "callback_url": "https://example.com/callback",
+                    },
+                )
+            )
+            await runner.started.wait()
+            mock_redis._values["qpu:job:cancelled:job-4"] = "1"
+            await task
+
+        asyncio.run(scenario())
+
+        assert runner.cancel_calls == 1
+        mock_webhook.send_result.assert_not_called()
+        mock_webhook.send_error.assert_not_called()
+        assert "msg-inflight-cancel" in mock_redis._acked
+        assert mock_redis._hashes["qpu:job:job-4:status"]["state"] == "cancelled"
+        assert consumer.current_job_id is None
 
     def test_failed_job_sends_error(
         self,

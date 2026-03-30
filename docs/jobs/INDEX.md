@@ -40,8 +40,10 @@ qpu:{id}:jobs  ──►     parse IR        ──►      to callback_url
    consumer group (`qpu:{qpu_id}:workers`).
 3. The message is parsed into a `NativeGateIR` circuit.
 4. The circuit is dispatched to the `JobExecutor`.
-5. The result (or error) is sent back via webhook.
-6. The message is `XACK`-ed.
+5. If the cloud cancels the job mid-flight, the node marks it
+   `cancelled` and skips webhook delivery.
+6. Otherwise, the result (or error) is sent back via webhook.
+7. The message is `XACK`-ed.
 
 ### Message Fields
 
@@ -59,5 +61,6 @@ Job progress is tracked in Redis hashes at `qpu:job:{job_id}:status`:
 | State | When |
 |---|---|
 | `executing` | Job picked up, executor running. |
+| `cancelled` | Cloud-side cancel signal observed before terminal webhook delivery. |
 | `completed` | Execution succeeded, webhook sent. |
 | `failed` | Execution or webhook failed. |
