@@ -255,7 +255,9 @@ class RedisConsumer:
             return False
 
     async def _has_cancel_signal(self, job_id: str) -> bool:
-        cancel_raw = await _await_if_needed(self._redis.get(f"qpu:job:cancelled:{job_id}"))
+        cancel_raw = await _await_if_needed(
+            self._redis.get(f"qpu:job:cancelled:{job_id}")
+        )
         return cancel_raw is not None
 
     async def _mark_job_cancelled(self, job_id: str, message_id: str) -> None:
@@ -277,7 +279,9 @@ class RedisConsumer:
         try:
             await _await_if_needed(cancel_current_job())
         except Exception:
-            logger.warning("Executor cancel hook failed for job %s", job_id, exc_info=True)
+            logger.warning(
+                "Executor cancel hook failed for job %s", job_id, exc_info=True
+            )
 
     async def _run_job_with_cancellation(
         self, job_id: str, ir: NativeGateIR, shots: int
@@ -403,7 +407,9 @@ class RedisConsumer:
         except Exception as exc:
             if await self._has_cancel_signal(job_id):
                 await self._mark_job_cancelled(job_id, message_id)
-                logger.info("Cancelled executing job %s while handling terminal state", job_id)
+                logger.info(
+                    "Cancelled executing job %s while handling terminal state", job_id
+                )
                 return
             logger.error("Job %s failed: %s", job_id, exc, exc_info=True)
             await self._safe_hset(
