@@ -96,7 +96,6 @@ previously persisted config from disk.
 | `CODA_PORT` | `8080` | Bind port for the FastAPI server. |
 | `CODA_EXECUTOR_FACTORY` | `""` | Import path for a custom executor (see below). Highest priority when set. |
 | `CODA_DEVICE_CONFIG` | `""` | Path to a YAML device config read by the executor factory. Defaults to `./site/device.yaml` if that file exists. The runtime also looks for an optional top-level `executor_factory` key in this file when `CODA_EXECUTOR_FACTORY` is unset. |
-| `CODA_CONSUMER_BATCH_SIZE` | `1` | Max jobs to read and dispatch together when the executor implements `batch_run()`. Values greater than `1` fall back to single-job mode if batch support is unavailable. |
 
 Provide either `CODA_NODE_TOKEN` for auto-provisioning, or both
 `CODA_JWT_PRIVATE_KEY` and `CODA_JWT_KEY_ID` for direct JWT startup.

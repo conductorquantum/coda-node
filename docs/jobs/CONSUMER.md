@@ -9,10 +9,10 @@ dispatch, continues polling it while the executor is running, and marks
 the Redis job state as `cancelled` instead of emitting a terminal
 webhook.
 
-When `batch_size > 1` and the executor implements `batch_run()`, the
-consumer reads up to that many new jobs per poll and executes them as a
-single hardware batch. If the executor does not expose `batch_run()`,
-the consumer logs a warning and stays in single-job mode.
+When the executor implements `batch_run()`, the consumer automatically
+reads up to 10 new jobs per poll and executes them as a single hardware
+batch. No configuration is needed -- batching is enabled purely by the
+executor's capabilities.
 
 ## Consumer Group Setup
 
@@ -56,7 +56,7 @@ messages = await self._redis.xreadgroup(
     groupname=self._group,
     consumername=self._consumer_name,
     streams={self._stream: ">"},
-    count=self._batch_size if self._can_batch else 1,
+    count=_BATCH_READ_COUNT if self._can_batch else 1,
     block=5000,
 )
 ```
@@ -125,10 +125,7 @@ prevent webhook delivery.
 
 ## Batch Processing
 
-`_process_batch()` is used only when both conditions are true:
-
-- `batch_size > 1`
-- The executor exposes `batch_run(jobs)`
+`_process_batch()` is used when the executor exposes `batch_run(jobs)`.
 
 The batch path:
 
@@ -164,7 +161,6 @@ RedisConsumer(
     qpu_id="my-qpu",
     consumer_name="worker-0",           # default
     crash_recovery_threshold_ms=60_000,  # default
-    batch_size=1,                        # default
 )
 ```
 

@@ -332,10 +332,25 @@ class TestBatchConsumer:
             runner=mock_runner,
             webhook=mock_webhook,
             qpu_id="test-node",
-            batch_size=2,
         )
 
         assert consumer._can_batch is True
+
+    def test_cannot_batch_without_batch_run(
+        self,
+        mock_redis: MockRedis,
+        mock_webhook: AsyncMock,
+    ) -> None:
+        runner = AsyncMock(spec=["run"])
+
+        consumer = RedisConsumer(
+            redis=cast(aioredis.Redis, mock_redis),
+            runner=runner,
+            webhook=mock_webhook,
+            qpu_id="test-node",
+        )
+
+        assert consumer._can_batch is False
 
     def test_processes_batch_and_sends_webhooks(
         self,
@@ -362,7 +377,6 @@ class TestBatchConsumer:
             runner=mock_runner,
             webhook=mock_webhook,
             qpu_id="test-node",
-            batch_size=2,
         )
 
         async def scenario() -> None:
@@ -412,7 +426,6 @@ class TestBatchConsumer:
             runner=mock_runner,
             webhook=mock_webhook,
             qpu_id="test-node",
-            batch_size=2,
         )
 
         async def scenario() -> None:
@@ -468,7 +481,6 @@ class TestBatchConsumer:
             runner=mock_runner,
             webhook=mock_webhook,
             qpu_id="test-node",
-            batch_size=2,
         )
 
         async def scenario() -> None:

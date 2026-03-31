@@ -46,6 +46,7 @@ _BACKOFF_FACTOR = 2.0
 _BACKOFF_MAX = 60.0
 _PENDING_RECHECK_SECS = 60.0
 _CANCEL_POLL_INTERVAL_SECS = 0.25
+_BATCH_READ_COUNT = 100
 
 
 class _JobCancelledWhileExecuting(Exception):
@@ -62,8 +63,8 @@ async def _await_if_needed(value: T | Awaitable[T]) -> T:
 class RedisConsumer:
     """Consume jobs from a Coda Redis stream and dispatch to an executor.
 
-    When *batch_size* > 1 and the executor supports ``batch_run``, the
-    consumer reads up to *batch_size* messages per iteration and
+    When the executor supports ``batch_run``, the consumer automatically
+    reads up to ``_BATCH_READ_COUNT`` messages per iteration and
     dispatches them as a single batch for compilation and execution.
 
     Args:
@@ -76,8 +77,6 @@ class RedisConsumer:
         crash_recovery_threshold_ms: Minimum idle time (in ms) before a
             pending message is considered abandoned and eligible for
             reprocessing.
-        batch_size: Maximum number of jobs to read and execute per
-            iteration.  Requires the executor to implement ``batch_run``.
     """
 
     def __init__(
@@ -88,7 +87,6 @@ class RedisConsumer:
         qpu_id: str,
         consumer_name: str = "worker-0",
         crash_recovery_threshold_ms: int = 60_000,
-        batch_size: int = 1,
     ) -> None:
         self._redis = redis
         self._runner = runner
@@ -96,9 +94,8 @@ class RedisConsumer:
         self._qpu_id = qpu_id
         self._consumer_name = consumer_name
         self._crash_recovery_threshold_ms = crash_recovery_threshold_ms
-        self._batch_size = batch_size
         batch_run = getattr(runner, "batch_run", None)
-        self._can_batch = batch_size > 1 and callable(batch_run)
+        self._can_batch = callable(batch_run)
         self._stream = f"qpu:{qpu_id}:jobs"
         self._group = f"qpu:{qpu_id}:workers"
         self._running = False
@@ -108,13 +105,6 @@ class RedisConsumer:
         self.current_job_id: str | None = None
         self.last_job_at: str | None = None
         self.redis_healthy = True
-
-        if batch_size > 1 and not self._can_batch:
-            logger.warning(
-                "batch_size=%d but executor does not support batch_run; "
-                "falling back to single-job processing",
-                batch_size,
-            )
 
     @staticmethod
     def _decode_fields(fields: Mapping[object, object]) -> dict[str, str]:
@@ -180,8 +170,9 @@ class RedisConsumer:
         """Run the main consume loop until :meth:`stop` is called.
 
         On each iteration the loop blocks (up to 5 s) for new messages
-        via ``XREADGROUP``.  When batching is enabled, reads up to
-        ``batch_size`` messages and dispatches them together.
+        via ``XREADGROUP``.  When the executor supports ``batch_run``,
+        reads up to ``_BATCH_READ_COUNT`` messages and dispatches them
+        together.
 
         Connection errors trigger exponential backoff (1 s -> 60 s max);
         unexpected errors trigger a 1 s backoff.  The loop sets
@@ -191,7 +182,7 @@ class RedisConsumer:
         await self.setup()
         await self.recover_pending()
 
-        read_count = self._batch_size if self._can_batch else 1
+        read_count = _BATCH_READ_COUNT if self._can_batch else 1
         consecutive_failures = 0
         last_pending_check = time.monotonic()
         while self._running:

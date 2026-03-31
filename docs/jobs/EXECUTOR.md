@@ -43,11 +43,11 @@ class MyExecutor:
         ...
 ```
 
-When `CODA_CONSUMER_BATCH_SIZE` is greater than `1`, `RedisConsumer`
-uses this hook to dispatch multiple jobs in one loop iteration. The
+When `batch_run()` is present, `RedisConsumer` automatically reads
+multiple messages per iteration and dispatches them together. The
 method must return one `ExecutionResult` per input job, in the same
-order. If `batch_run()` is absent, the consumer logs a warning and
-falls back to single-job processing.
+order. No configuration is needed -- the consumer detects `batch_run()`
+at startup.
 
 ### ExecutionResult
 

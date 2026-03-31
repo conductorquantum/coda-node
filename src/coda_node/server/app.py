@@ -105,7 +105,6 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
             runner=runner,
             webhook=webhook,
             qpu_id=settings.qpu_id,
-            batch_size=settings.consumer_batch_size,
         )
 
         heartbeat = HeartbeatClient(
