@@ -77,7 +77,13 @@ class TestFetchNodeBundle:
         mock_response.raise_for_status = MagicMock()
         mock_response.json.return_value = _sample_bundle()
 
-        with patch("coda_node.vpn.service.httpx.AsyncClient") as mock_client_cls:
+        with (
+            patch(
+                "coda_node.vpn.service._connectivity_payload_for_connect",
+                return_value=None,
+            ),
+            patch("coda_node.vpn.service.httpx.AsyncClient") as mock_client_cls,
+        ):
             client = AsyncMock()
             client.post = AsyncMock(return_value=mock_response)
             client.__aenter__ = AsyncMock(return_value=client)
@@ -92,6 +98,26 @@ class TestFetchNodeBundle:
         assert set(request_body) == {"machine_fingerprint"}
         assert request_body["machine_fingerprint"]
         assert client.post.call_args.args[0] == settings.connect_url
+
+    @pytest.mark.asyncio
+    async def test_fetches_bundle_includes_connectivity_when_available(self) -> None:
+        settings = Settings()
+        settings.node_token = "node-token"
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = _sample_bundle()
+
+        with patch("coda_node.vpn.service.httpx.AsyncClient") as mock_client_cls:
+            client = AsyncMock()
+            client.post = AsyncMock(return_value=mock_response)
+            client.__aenter__ = AsyncMock(return_value=client)
+            client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = client
+
+            await fetch_node_bundle(settings, connectivity=[[1, 0], [2, 1]])
+
+        request_body = client.post.call_args.kwargs["json"]
+        assert request_body["connectivity"] == [[1, 0], [2, 1]]
 
     @pytest.mark.asyncio
     async def test_fetches_reconnect_bundle_with_jwt(self) -> None:
@@ -134,6 +160,34 @@ class TestFetchNodeBundle:
             == "fingerprint-123"
         )
         assert set(client.post.call_args.kwargs["json"]) == {"machine_fingerprint"}
+
+    @pytest.mark.asyncio
+    async def test_fetches_reconnect_bundle_includes_connectivity_when_passed(self) -> None:
+        settings = Settings()
+        settings.jwt_private_key = "private-key"
+        settings.jwt_key_id = "kid-123"
+        settings.node_token = ""
+        settings.qpu_id = "cq-node-test"
+        settings.node_machine_fingerprint = "fingerprint-123"
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json.return_value = _sample_bundle()
+
+        with (
+            patch("coda_node.vpn.service.sign_token", return_value="signed-jwt"),
+            patch("coda_node.vpn.service.httpx.AsyncClient") as mock_client_cls,
+        ):
+            client = AsyncMock()
+            client.post = AsyncMock(return_value=mock_response)
+            client.__aenter__ = AsyncMock(return_value=client)
+            client.__aexit__ = AsyncMock(return_value=False)
+            mock_client_cls.return_value = client
+
+            await fetch_reconnect_bundle(settings, connectivity=[[2, 1], [3, 2]])
+
+        body = client.post.call_args.kwargs["json"]
+        assert body["connectivity"] == [[2, 1], [3, 2]]
+        assert body["machine_fingerprint"] == "fingerprint-123"
 
 
 class TestPostConnectRetry:
@@ -439,6 +493,10 @@ class TestConnectSettings:
         settings.node_token = "tok"
         with (
             patch(
+                "coda_node.vpn.service._connectivity_payload_for_connect",
+                return_value=None,
+            ),
+            patch(
                 "coda_node.vpn.service.fetch_node_bundle",
                 new_callable=AsyncMock,
                 return_value={"qpu_id": "a"},
@@ -472,10 +530,16 @@ class TestConnectSettings:
             "coda_node.vpn.service.PERSISTED_PRIVATE_KEY_PATH", key_path
         )
 
-        with patch(
-            "coda_node.vpn.service.fetch_node_bundle",
-            new_callable=AsyncMock,
-            return_value=bundle,
+        with (
+            patch(
+                "coda_node.vpn.service._connectivity_payload_for_connect",
+                return_value=None,
+            ),
+            patch(
+                "coda_node.vpn.service.fetch_node_bundle",
+                new_callable=AsyncMock,
+                return_value=bundle,
+            ),
         ):
             await connect_settings(settings)
 
@@ -505,6 +569,10 @@ class TestConnectSettings:
 
         with (
             patch(
+                "coda_node.vpn.service._connectivity_payload_for_connect",
+                return_value=None,
+            ),
+            patch(
                 "coda_node.vpn.service.ensure_persisted_vpn",
                 new_callable=AsyncMock,
             ) as mock_ensure_vpn,
@@ -517,7 +585,7 @@ class TestConnectSettings:
             await connect_settings(settings)
 
         mock_ensure_vpn.assert_awaited_once_with(settings)
-        mock_fetch.assert_awaited_once_with(settings)
+        mock_fetch.assert_awaited_once_with(settings, connectivity=None)
 
 
 class TestReconnectWorkflow:

@@ -10,6 +10,7 @@ __all__ = [
     "CodaError",
     "ConfigError",
     "ExecutorError",
+    "HeartbeatRejectedError",
     "NodeError",
     "VPNError",
     "WebhookError",
@@ -34,6 +35,10 @@ class VPNError(CodaError):
 
 class NodeError(CodaError):
     """Node provisioning or reconnect failure."""
+
+
+class HeartbeatRejectedError(CodaError):
+    """Cloud returned a non-success response to a QPU heartbeat POST."""
 
 
 class ExecutorError(CodaError):

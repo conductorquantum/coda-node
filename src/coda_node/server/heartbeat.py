@@ -18,6 +18,7 @@ from typing import TYPE_CHECKING
 
 import httpx
 
+from coda_node.errors import HeartbeatRejectedError
 from coda_node.server.auth import sign_token
 
 if TYPE_CHECKING:
@@ -29,6 +30,20 @@ __all__ = ["HeartbeatClient"]
 
 _DEFAULT_INTERVAL = 30
 _HTTP_TIMEOUT = 10.0
+
+
+def _format_heartbeat_error_response(response: httpx.Response) -> str:
+    """Best-effort message from a failed heartbeat response body."""
+    try:
+        data = response.json()
+        if isinstance(data, dict) and "error" in data:
+            return str(data["error"])
+    except Exception:
+        pass
+    text = (response.text or "").strip()
+    if text:
+        return text[:800]
+    return response.reason_phrase or "unknown error"
 
 
 class HeartbeatClient:
@@ -87,7 +102,12 @@ class HeartbeatClient:
             json=body,
             headers={"Authorization": f"Bearer {token}", **self._extra_headers},
         )
-        response.raise_for_status()
+        if response.is_success:
+            return
+        detail = _format_heartbeat_error_response(response)
+        raise HeartbeatRejectedError(
+            f"HTTP {response.status_code} from heartbeat endpoint: {detail}"
+        )
 
     async def run(self) -> None:
         """Run the heartbeat loop until :meth:`stop` is called."""
@@ -99,6 +119,13 @@ class HeartbeatClient:
             try:
                 await self._send()
                 logger.debug("Heartbeat sent to %s", self._url)
+            except HeartbeatRejectedError as exc:
+                logger.warning(
+                    "Heartbeat rejected by cloud (%s). Fix configuration or align "
+                    "qpu_devices.qubits with the node's reported connectivity. %s",
+                    self._url,
+                    exc,
+                )
             except Exception:
                 logger.warning("Heartbeat to %s failed", self._url, exc_info=True)
             await asyncio.sleep(self._interval)

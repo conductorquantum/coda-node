@@ -363,7 +363,32 @@ async def _post_connect(
     ) from last_exc
 
 
-async def fetch_node_bundle(settings: Settings) -> dict[str, Any]:
+def _connectivity_payload_for_connect(settings: Settings) -> list[list[int]] | None:
+    """Load the executor and derive live topology for the connect handshake.
+
+    If the executor cannot be loaded (missing config, import errors), returns
+    ``None`` so connect proceeds without ``connectivity`` (cloud skips validation).
+    """
+    try:
+        from coda_node.server.device_topology import resolve_connectivity_from_device_spec
+        from coda_node.server.executor import load_executor
+
+        runner = load_executor(settings)
+        device_spec = getattr(runner, "device", None)
+        return resolve_connectivity_from_device_spec(device_spec)
+    except Exception as exc:
+        logger.warning(
+            "Skipping live connectivity on connect handshake (executor unavailable): %s",
+            exc,
+        )
+        return None
+
+
+async def fetch_node_bundle(
+    settings: Settings,
+    *,
+    connectivity: list[list[int]] | None = None,
+) -> dict[str, Any]:
     """Fetch the provisioning bundle using a one-time node token.
 
     POSTs the machine fingerprint to the Coda connect endpoint.  The
@@ -383,9 +408,11 @@ async def fetch_node_bundle(settings: Settings) -> dict[str, Any]:
     if not settings.node_token:
         raise NodeError("node token is empty")
 
-    payload = {
+    payload: dict[str, Any] = {
         "machine_fingerprint": _resolve_machine_fingerprint(settings),
     }
+    if connectivity is not None:
+        payload["connectivity"] = connectivity
     return await _post_connect(
         settings,
         auth_header=f"Bearer {settings.node_token}",
@@ -394,7 +421,11 @@ async def fetch_node_bundle(settings: Settings) -> dict[str, Any]:
     )
 
 
-async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
+async def fetch_reconnect_bundle(
+    settings: Settings,
+    *,
+    connectivity: list[list[int]] | None = None,
+) -> dict[str, Any]:
     """Fetch a reconnect bundle using stored JWT credentials.
 
     Authenticates with a freshly signed JWT (instead of a node
@@ -414,6 +445,8 @@ async def fetch_reconnect_bundle(settings: Settings) -> dict[str, Any]:
     payload = {
         "machine_fingerprint": _resolve_machine_fingerprint(settings),
     }
+    if connectivity is not None:
+        payload["connectivity"] = connectivity
     token = sign_token(
         settings.qpu_id,
         settings.jwt_private_key,
@@ -539,11 +572,12 @@ async def connect_settings(settings: Settings) -> None:
         NodeError: On provisioning or reconnect failure.
     """
     _resolve_machine_fingerprint(settings)
+    connectivity = _connectivity_payload_for_connect(settings)
     if settings.node_token:
-        bundle = await fetch_node_bundle(settings)
+        bundle = await fetch_node_bundle(settings, connectivity=connectivity)
     else:
         await ensure_persisted_vpn(settings)
-        bundle = await fetch_reconnect_bundle(settings)
+        bundle = await fetch_reconnect_bundle(settings, connectivity=connectivity)
     try:
         await apply_node_bundle(settings, bundle)
         await asyncio.to_thread(_persist_runtime_config, settings)

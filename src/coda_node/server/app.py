@@ -22,6 +22,7 @@ from coda_node.server.consumer import RedisConsumer
 from coda_node.server.executor import JobExecutor, load_executor
 from coda_node.server.heartbeat import HeartbeatClient
 from coda_node.server.webhook import WebhookClient
+from coda_node.server.device_topology import resolve_connectivity_from_device_spec
 from coda_node.vpn import (
     ServiceState,
     VPNGuard,
@@ -30,16 +31,6 @@ from coda_node.vpn import (
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _resolve_connectivity(device_spec: object | None) -> list[list[int]] | None:
-    """Extract qubit connectivity from a device spec, preferring directed edges."""
-    if device_spec is None:
-        return None
-    directed = getattr(device_spec, "directed_edges", None)
-    if directed:
-        return [list(e) for e in directed]
-    return [list(e) for e in device_spec.logical_edges]  # type: ignore[attr-defined]
 
 
 async def _on_vpn_state_change(state: ServiceState) -> None:
@@ -93,7 +84,7 @@ def create_app(executor: JobExecutor | None = None) -> FastAPI:
         runner = executor or load_executor(settings)
 
         device_spec = getattr(runner, "device", None)
-        connectivity = _resolve_connectivity(device_spec)
+        connectivity = resolve_connectivity_from_device_spec(device_spec)
 
         webhook = WebhookClient(
             qpu_id=settings.qpu_id,

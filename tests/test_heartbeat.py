@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from coda_node.server.heartbeat import HeartbeatClient
+from coda_node.errors import HeartbeatRejectedError
+from coda_node.server.heartbeat import HeartbeatClient, _format_heartbeat_error_response
 
 
 def _make_consumer(**overrides: object) -> MagicMock:
@@ -16,6 +17,37 @@ def _make_consumer(**overrides: object) -> MagicMock:
     consumer.last_job_at = overrides.get("last_job_at")
     consumer.redis_healthy = overrides.get("redis_healthy", True)
     return consumer
+
+
+def test_format_heartbeat_error_response_prefers_json_error_field() -> None:
+    response = MagicMock()
+    response.json.return_value = {"error": "Connectivity edge (19, 18) outside [0, 19)"}
+    assert _format_heartbeat_error_response(response) == "Connectivity edge (19, 18) outside [0, 19)"
+
+
+@patch("coda_node.server.heartbeat.sign_token", return_value="mock-jwt")
+async def test_send_raises_heartbeat_rejected_on_http_error(_mock_sign: MagicMock) -> None:
+    mock_response = MagicMock()
+    mock_response.is_success = False
+    mock_response.status_code = 400
+    mock_response.json.return_value = {"error": "topology mismatch"}
+    mock_response.reason_phrase = "Bad Request"
+    mock_response.text = '{"error": "topology mismatch"}'
+    mock_http = AsyncMock()
+    mock_http.post = AsyncMock(return_value=mock_response)
+
+    consumer = _make_consumer()
+    client = HeartbeatClient(
+        heartbeat_url="https://example.com/heartbeat",
+        qpu_id="qpu-1",
+        jwt_private_key="fake-key",
+        jwt_key_id="kid-1",
+        consumer=consumer,
+    )
+    client._client = mock_http
+
+    with pytest.raises(HeartbeatRejectedError, match="400.*topology mismatch"):
+        await client._send()
 
 
 @patch("coda_node.server.heartbeat.sign_token", return_value="mock-jwt")
