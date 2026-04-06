@@ -370,7 +370,9 @@ def _connectivity_payload_for_connect(settings: Settings) -> list[list[int]] | N
     ``None`` so connect proceeds without ``connectivity`` (cloud skips validation).
     """
     try:
-        from coda_node.server.device_topology import resolve_connectivity_from_device_spec
+        from coda_node.server.device_topology import (
+            resolve_connectivity_from_device_spec,
+        )
         from coda_node.server.executor import load_executor
 
         runner = load_executor(settings)
@@ -442,7 +444,7 @@ async def fetch_reconnect_bundle(
     Raises:
         NodeError: If the HTTP request fails.
     """
-    payload = {
+    payload: dict[str, Any] = {
         "machine_fingerprint": _resolve_machine_fingerprint(settings),
     }
     if connectivity is not None:

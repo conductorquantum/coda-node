@@ -162,7 +162,9 @@ class TestFetchNodeBundle:
         assert set(client.post.call_args.kwargs["json"]) == {"machine_fingerprint"}
 
     @pytest.mark.asyncio
-    async def test_fetches_reconnect_bundle_includes_connectivity_when_passed(self) -> None:
+    async def test_fetches_reconnect_bundle_includes_connectivity_when_passed(
+        self,
+    ) -> None:
         settings = Settings()
         settings.jwt_private_key = "private-key"
         settings.jwt_key_id = "kid-123"

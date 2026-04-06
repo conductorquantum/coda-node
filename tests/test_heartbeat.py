@@ -22,11 +22,16 @@ def _make_consumer(**overrides: object) -> MagicMock:
 def test_format_heartbeat_error_response_prefers_json_error_field() -> None:
     response = MagicMock()
     response.json.return_value = {"error": "Connectivity edge (19, 18) outside [0, 19)"}
-    assert _format_heartbeat_error_response(response) == "Connectivity edge (19, 18) outside [0, 19)"
+    assert (
+        _format_heartbeat_error_response(response)
+        == "Connectivity edge (19, 18) outside [0, 19)"
+    )
 
 
 @patch("coda_node.server.heartbeat.sign_token", return_value="mock-jwt")
-async def test_send_raises_heartbeat_rejected_on_http_error(_mock_sign: MagicMock) -> None:
+async def test_send_raises_heartbeat_rejected_on_http_error(
+    _mock_sign: MagicMock,
+) -> None:
     mock_response = MagicMock()
     mock_response.is_success = False
     mock_response.status_code = 400
@@ -46,7 +51,7 @@ async def test_send_raises_heartbeat_rejected_on_http_error(_mock_sign: MagicMoc
     )
     client._client = mock_http
 
-    with pytest.raises(HeartbeatRejectedError, match="400.*topology mismatch"):
+    with pytest.raises(HeartbeatRejectedError, match=r"400.*topology mismatch"):
         await client._send()
 
 

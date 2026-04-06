@@ -4,7 +4,9 @@ from coda_node.server.device_topology import resolve_connectivity_from_device_sp
 
 
 class _FakeDevice:
-    def __init__(self, directed: list[tuple[int, int]] | None, logical: list[tuple[int, int]]) -> None:
+    def __init__(
+        self, directed: list[tuple[int, int]] | None, logical: list[tuple[int, int]]
+    ) -> None:
         self.directed_edges = directed
         self.logical_edges = logical
 

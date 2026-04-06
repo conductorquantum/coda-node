@@ -19,10 +19,10 @@ from fastapi.responses import JSONResponse
 
 from coda_node.server.config import Settings
 from coda_node.server.consumer import RedisConsumer
+from coda_node.server.device_topology import resolve_connectivity_from_device_spec
 from coda_node.server.executor import JobExecutor, load_executor
 from coda_node.server.heartbeat import HeartbeatClient
 from coda_node.server.webhook import WebhookClient
-from coda_node.server.device_topology import resolve_connectivity_from_device_spec
 from coda_node.vpn import (
     ServiceState,
     VPNGuard,

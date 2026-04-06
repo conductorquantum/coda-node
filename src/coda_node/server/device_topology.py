@@ -5,7 +5,9 @@ from __future__ import annotations
 __all__ = ["resolve_connectivity_from_device_spec"]
 
 
-def resolve_connectivity_from_device_spec(device_spec: object | None) -> list[list[int]] | None:
+def resolve_connectivity_from_device_spec(
+    device_spec: object | None,
+) -> list[list[int]] | None:
     """Extract qubit connectivity from a device spec, preferring directed edges.
 
     Matches the shape sent in node heartbeats and connect payloads.
