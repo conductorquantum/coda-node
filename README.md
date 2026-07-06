@@ -244,6 +244,7 @@ distinguish expected operational errors from unexpected bugs:
 | `VPNError` | VPN tunnel or health check failure. |
 | `NodeError` | Node provisioning or reconnect failure. |
 | `ExecutorError` | Executor loading or job execution failure. |
+| `HeartbeatRejectedError` | Cloud returned a non-success response to a QPU heartbeat POST. |
 | `WebhookError` | Webhook delivery failure. |
 
 Import from the top-level package:
