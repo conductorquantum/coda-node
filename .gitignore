@@ -10,3 +10,5 @@ build/
 dist/
 .DS_Store
 .e2e-credentials.json
+
+.license-scan/
