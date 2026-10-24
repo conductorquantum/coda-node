@@ -75,15 +75,20 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
+      - uses: astral-sh/setup-uv@v5
+
       - name: Bump version in pyproject.toml
         run: sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
 
       - name: Bump version in __init__.py
         run: sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/coda_node/__init__.py
 
+      - name: Refresh lockfile
+        run: uv lock
+
       - name: Commit and tag
         run: |
-          git add pyproject.toml src/coda_node/__init__.py
+          git add pyproject.toml src/coda_node/__init__.py uv.lock
           if ! git diff --cached --quiet; then
             git commit -m "release: v${VERSION}"
           fi
