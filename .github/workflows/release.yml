@@ -8,30 +8,49 @@ on:
         required: true
         type: string
 
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  VERSION: ${{ inputs.version }}
+
 jobs:
   validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Require main branch
+        run: |
+          if [ "$GITHUB_REF" != "refs/heads/main" ]; then
+            echo "::error::Releases must be run from main"
+            exit 1
+          fi
 
       - name: Validate semver format
         run: |
-          if ! echo "${{ inputs.version }}" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-            echo "::error::Version '${{ inputs.version }}' is not valid semver (expected x.y.z)"
+          if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Version '$VERSION' is not valid semver (expected x.y.z)"
             exit 1
           fi
 
       - name: Check tag does not already exist
         run: |
-          if git rev-parse "v${{ inputs.version }}" >/dev/null 2>&1; then
-            echo "::error::Tag v${{ inputs.version }} already exists"
+          if git show-ref --verify --quiet "refs/tags/v${VERSION}"; then
+            echo "::error::Tag v${VERSION} already exists"
             exit 1
           fi
 
       - name: Check CHANGELOG has entry for version
         run: |
-          if ! grep -qE "^## \[${{ inputs.version }}\]" CHANGELOG.md; then
-            echo "::error::CHANGELOG.md has no entry for version ${{ inputs.version }}"
+          if ! awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1 {found=1}
+            END {exit !found}
+          ' CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no entry for version $VERSION"
             exit 1
           fi
 
@@ -44,10 +63,12 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: write
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          ref: ${{ github.sha }}
 
       - name: Configure git
         run: |
@@ -55,32 +76,38 @@ jobs:
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
       - name: Bump version in pyproject.toml
-        run: sed -i 's/^version = ".*"/version = "${{ inputs.version }}"/' pyproject.toml
+        run: sed -i "s/^version = \".*\"/version = \"${VERSION}\"/" pyproject.toml
 
       - name: Bump version in __init__.py
-        run: sed -i 's/^__version__ = ".*"/__version__ = "${{ inputs.version }}"/' src/coda_node/__init__.py
+        run: sed -i "s/^__version__ = \".*\"/__version__ = \"${VERSION}\"/" src/coda_node/__init__.py
 
       - name: Commit and tag
         run: |
           git add pyproject.toml src/coda_node/__init__.py
-          git commit -m "release: v${{ inputs.version }}"
-          git tag "v${{ inputs.version }}"
-          git push origin main --tags
+          if ! git diff --cached --quiet; then
+            git commit -m "release: v${VERSION}"
+          fi
+          git tag "v${VERSION}"
+          git push --atomic origin HEAD:refs/heads/main "refs/tags/v${VERSION}"
 
       - name: Extract release notes from CHANGELOG
-        id: notes
         run: |
-          notes=$(awk '/^## \[${{ inputs.version }}\]/{found=1; next} found && /^## \[/{exit} found' CHANGELOG.md)
-          {
-            echo "body<<EOF"
-            echo "$notes"
-            echo "EOF"
-          } >> "$GITHUB_OUTPUT"
+          awk -v heading="## [$VERSION]" '
+            index($0, heading) == 1 {found=1; next}
+            found && /^## \[/ {exit}
+            found
+          ' CHANGELOG.md > release-notes.md
 
       - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v${{ inputs.version }}" \
-            --title "v${{ inputs.version }}" \
-            --notes "${{ steps.notes.outputs.body }}"
+          gh release create "v${VERSION}" \
+            --verify-tag \
+            --title "v${VERSION}" \
+            --notes-file release-notes.md
+
+      - name: Start PyPI publishing
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh workflow run publish.yml --ref main --field "tag=v${VERSION}"
