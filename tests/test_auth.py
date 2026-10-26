@@ -23,8 +23,36 @@ def keypair() -> KeyPair:
 
 class TestGenerateKeypair:
     def test_returns_valid_pem_keys(self, keypair: KeyPair) -> None:
-        assert keypair.private_key_pem.startswith("-----BEGIN PRIVATE KEY-----")
-        assert keypair.public_key_pem.startswith("-----BEGIN PUBLIC KEY-----")
+        from cryptography.hazmat.primitives import serialization
+        from cryptography.hazmat.primitives.asymmetric.rsa import (
+            RSAPrivateKey,
+            RSAPublicKey,
+        )
+
+        private_key = serialization.load_pem_private_key(
+            keypair.private_key_pem.encode(), password=None
+        )
+        public_key = serialization.load_pem_public_key(keypair.public_key_pem.encode())
+        assert isinstance(private_key, RSAPrivateKey)
+        assert isinstance(public_key, RSAPublicKey)
+        assert public_key.public_numbers() == private_key.public_key().public_numbers()
+
+        # Unencrypted PKCS#8 private key and SubjectPublicKeyInfo public key, PEM.
+        assert (
+            keypair.private_key_pem
+            == private_key.private_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PrivateFormat.PKCS8,
+                encryption_algorithm=serialization.NoEncryption(),
+            ).decode()
+        )
+        assert (
+            keypair.public_key_pem
+            == public_key.public_bytes(
+                encoding=serialization.Encoding.PEM,
+                format=serialization.PublicFormat.SubjectPublicKeyInfo,
+            ).decode()
+        )
         assert keypair.key_id == "test-node-001"
 
     def test_unique_keys_per_call(self) -> None:
